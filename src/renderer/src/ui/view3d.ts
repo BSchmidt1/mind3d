@@ -35,6 +35,7 @@ export class View3D {
   private keyMoveNodeId: string | null = null;
   private pendingSpawn = new Map<string, { x: number; y: number; z: number }>();
   private labelInput: HTMLInputElement;
+  private suppressNextBgClick = false;
 
   constructor(
     private container: HTMLElement,
@@ -44,6 +45,8 @@ export class View3D {
   ) {
     this.graph = new (ForceGraph3D as any)(container);
     this.graph
+      .width(container.clientWidth)
+      .height(container.clientHeight)
       .backgroundColor('#14181f')
       .nodeId('id')
       .linkSource('source')
@@ -60,8 +63,17 @@ export class View3D {
         this.store.apply(setPosition(n.id, n.x ?? 0, n.y ?? 0, n.z ?? 0));
       })
       .onBackgroundClick(() => {
+        if (this.suppressNextBgClick) {
+          this.suppressNextBgClick = false;
+          return;
+        }
         if (!this.linkMode) this.selection.set(null);
       });
+
+    const resizeObserver = new ResizeObserver(() => {
+      this.graph.width(this.container.clientWidth).height(this.container.clientHeight);
+    });
+    resizeObserver.observe(container);
 
     this.container.addEventListener('dblclick', (ev) => {
       if (this.hoverNodeId !== null) return;
@@ -73,6 +85,7 @@ export class View3D {
       this.pendingSpawn.set(node.id, p);
       this.store.apply(addNode(node));
       this.selection.set(node.id);
+      this.suppressNextBgClick = true;
       this.beginLabelEdit(node.id);
     });
 
@@ -308,6 +321,7 @@ export class View3D {
     if (!m) throw new Error(`togglePin: no such node "${id}"`);
     if (m.fx !== null) {
       this.store.apply(setPosition(id, null, null, null));
+      this.graph.d3ReheatSimulation();
       return;
     }
     const sim = this.simNodes.find((n) => n.id === id);
@@ -389,5 +403,6 @@ export class View3D {
 
   releaseAllNow(): void {
     this.store.apply(releaseAll(this.store.state));
+    this.graph.d3ReheatSimulation();
   }
 }

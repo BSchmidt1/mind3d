@@ -7,6 +7,7 @@ import { mountClaudeSection } from './claudeSection';
 
 export class DetailPanel {
   private shownId: string | null = null;
+  private renderTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private container: HTMLElement,
@@ -17,9 +18,21 @@ export class DetailPanel {
     selection.subscribe(() => this.render());
     store.subscribe((ev) => {
       const sel = this.selection.get();
-      if (sel !== null && (ev.ids.includes(sel) || ev.kind === 'structure')) this.render();
+      if (sel !== null && (ev.ids.includes(sel) || ev.kind === 'structure')) this.scheduleRender();
     });
     this.render();
+  }
+
+  // Defer a store-triggered rebuild by one macrotask so a native click already
+  // in flight on a button inside the panel (e.g. mousedown on Run triggering
+  // a synchronous blur -> store update) can still deliver its click event
+  // before the DOM under it is torn down and rebuilt.
+  private scheduleRender(): void {
+    if (this.renderTimer !== null) return;
+    this.renderTimer = setTimeout(() => {
+      this.renderTimer = null;
+      this.render();
+    }, 0);
   }
 
   // Flush an uncommitted edit of the previously-shown node before the panel
@@ -46,6 +59,7 @@ export class DetailPanel {
   }
 
   private render(): void {
+    const scrollTop = this.container.scrollTop;
     const id = this.selection.get();
     const node = id !== null ? this.store.state.nodes.get(id) : undefined;
 
@@ -145,6 +159,7 @@ export class DetailPanel {
       this.getFallbackCwd
     );
     this.shownId = id;
+    this.container.scrollTop = scrollTop;
   }
 
   private renderMarkdown(el: HTMLElement, md: string): void {

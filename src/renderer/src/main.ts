@@ -131,6 +131,7 @@ releaseBtn.textContent = 'Release all';
 document.getElementById('topbar')!.insertBefore(freezeBtn, fileStateEl);
 document.getElementById('topbar')!.insertBefore(releaseBtn, fileStateEl);
 freezeBtn.addEventListener('click', () => guard(() => {
+  if (store.state.nodes.size === 0) { setStatus('map is empty'); return; }
   if (view3d.pinnedCount() === store.state.nodes.size) { setStatus('all nodes already pinned'); return; }
   view3d.freezeAllNow();
 }));

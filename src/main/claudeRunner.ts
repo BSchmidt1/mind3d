@@ -26,6 +26,7 @@ export function registerClaudeIpc(): void {
       cwd,
       env: process.env
     });
+    child.stdin.end();
     runs.set(runId, child);
     child.stdout.on('data', (d: Buffer) =>
       event.sender.send('claude-chunk', { runId, stream: 'stdout', text: d.toString() })
