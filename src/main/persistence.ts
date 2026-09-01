@@ -52,7 +52,13 @@ export function registerPersistenceIpc(getWindow: () => BrowserWindow | null): v
   });
 
   ipcMain.handle('file-read', (_e, p: string) => fs.readFileSync(p, 'utf8'));
-  ipcMain.handle('open-external', (_e, url: string) => shell.openExternal(url));
+  ipcMain.handle('open-external', (_e, url: string) => {
+    const proto = new URL(url).protocol;
+    if (proto !== 'http:' && proto !== 'https:' && proto !== 'obsidian:') {
+      throw new Error(`open-external: scheme "${proto}" not allowed`);
+    }
+    return shell.openExternal(url);
+  });
   ipcMain.handle('open-path', async (_e, p: string) => {
     const err = await shell.openPath(p);
     if (err) throw new Error(`openPath failed: ${err}`);

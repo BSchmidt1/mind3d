@@ -12,12 +12,18 @@ const api: Mind3dApi = {
   runClaude: (runId, prompt, cwd) => ipcRenderer.send('claude-run', runId, prompt, cwd),
   killClaude: (runId) => ipcRenderer.send('claude-kill', runId),
   onClaudeChunk: (cb) => {
+    // Single-subscriber semantics: last subscription wins.
+    ipcRenderer.removeAllListeners('claude-chunk');
     ipcRenderer.on('claude-chunk', (_e, c: ClaudeChunk) => cb(c));
   },
   onClaudeExit: (cb) => {
+    // Single-subscriber semantics: last subscription wins.
+    ipcRenderer.removeAllListeners('claude-exit');
     ipcRenderer.on('claude-exit', (_e, ex: ClaudeExit) => cb(ex));
   },
   onSaveRequested: (cb) => {
+    // Single-subscriber semantics: last subscription wins.
+    ipcRenderer.removeAllListeners('save-requested');
     ipcRenderer.on('save-requested', () => cb());
   },
   saveDone: () => ipcRenderer.send('save-done')
