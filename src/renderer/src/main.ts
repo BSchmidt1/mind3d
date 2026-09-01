@@ -4,6 +4,7 @@ import { View3D } from './ui/view3d';
 import { fuzzyScore } from './core/fuzzy';
 import { OutlinePanel } from './ui/outlinePanel';
 import { DetailPanel } from './ui/detailPanel';
+import { MapSession } from './mapSession';
 
 export const store = new GraphStore();
 export const selection = new Selection();
@@ -84,4 +85,82 @@ window.addEventListener('keydown', (ev) => {
 });
 
 new OutlinePanel(document.getElementById('outline-panel')!, store, selection);
-new DetailPanel(document.getElementById('detail-panel')!, store, selection);
+
+// --- map session (new/open/save/autosave/quit-save) ---
+const fileStateEl = document.createElement('span');
+fileStateEl.id = 'file-state';
+document.getElementById('topbar')!.insertBefore(fileStateEl, statusEl);
+
+export const session = new MapSession(store, (label) => {
+  fileStateEl.textContent = label;
+});
+
+function guard(fn: () => void | Promise<void>): void {
+  void (async (): Promise<void> => {
+    try {
+      await fn();
+    } catch (err) {
+      setStatus(`ERROR: ${(err as Error).message}`);
+    }
+  })();
+}
+
+document.getElementById('btn-new')!.addEventListener('click', () => guard(() => session.newMap()));
+document.getElementById('btn-open')!.addEventListener('click', () => guard(() => session.open()));
+document.getElementById('btn-save')!.addEventListener('click', () => guard(() => session.save()));
+
+window.addEventListener('keydown', (ev) => {
+  if (!ev.ctrlKey) return;
+  if (ev.key === 's') { ev.preventDefault(); guard(() => session.save()); }
+  if (ev.key === 'o') { ev.preventDefault(); guard(() => session.open()); }
+});
+
+// --- freeze/release + counts in status ---
+const freezeBtn = document.createElement('button');
+freezeBtn.textContent = 'Freeze all';
+const releaseBtn = document.createElement('button');
+releaseBtn.textContent = 'Release all';
+document.getElementById('topbar')!.insertBefore(freezeBtn, fileStateEl);
+document.getElementById('topbar')!.insertBefore(releaseBtn, fileStateEl);
+freezeBtn.addEventListener('click', () => guard(() => {
+  if (view3d.pinnedCount() === store.state.nodes.size) { setStatus('all nodes already pinned'); return; }
+  view3d.freezeAllNow();
+}));
+releaseBtn.addEventListener('click', () => guard(() => {
+  if (view3d.pinnedCount() === 0) { setStatus('no pinned nodes'); return; }
+  view3d.releaseAllNow();
+}));
+
+function updateCounts(): void {
+  const s = store.state;
+  setStatus(`${s.nodes.size} nodes · ${s.edges.size} edges · ${view3d.pinnedCount()} pinned`);
+}
+store.subscribe(updateCounts);
+updateCounts();
+
+// --- help overlay ---
+const help = document.createElement('div');
+help.id = 'help-overlay';
+help.hidden = true;
+help.innerHTML = `
+  <h3>mind3d shortcuts</h3>
+  <pre>
+dblclick empty   new node          Tab        add child
+click            select            l          link mode (Esc cancels)
+drag / arrows    move + pin        Shift+↑/↓  move in depth
+p                pin/unpin         e          edit label
+Delete           delete node       f          fly to selection
+x                focus mode        Ctrl+Z/Shift+Z  undo/redo
+Ctrl+S/O         save/open         ?          this help
+outline: Enter sibling · Tab indent · Shift+Tab outdent · dblclick rename
+  </pre>`;
+document.body.appendChild(help);
+window.addEventListener('keydown', (ev) => {
+  if (ev.key === '?' && !(document.activeElement instanceof HTMLInputElement) &&
+      !(document.activeElement instanceof HTMLTextAreaElement)) {
+    help.hidden = !help.hidden;
+  }
+});
+help.addEventListener('click', () => { help.hidden = true; });
+
+new DetailPanel(document.getElementById('detail-panel')!, store, selection, () => session.getMapDir());

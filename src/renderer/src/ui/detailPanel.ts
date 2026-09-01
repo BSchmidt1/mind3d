@@ -11,7 +11,8 @@ export class DetailPanel {
   constructor(
     private container: HTMLElement,
     private store: GraphStore,
-    private selection: Selection
+    private selection: Selection,
+    private getFallbackCwd: () => Promise<string>
   ) {
     selection.subscribe(() => this.render());
     store.subscribe((ev) => {
@@ -141,7 +142,7 @@ export class DetailPanel {
       this.container.querySelector('#claude-section')!,
       id,
       this.store,
-      async () => '/tmp'   // replaced in Task 10 with the map file's directory
+      this.getFallbackCwd
     );
     this.shownId = id;
   }
