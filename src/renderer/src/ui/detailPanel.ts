@@ -5,6 +5,8 @@ import type { Selection } from '../core/selection';
 import { setAttachedFile, setColor, setNotes, setTags } from '../core/commands';
 
 export class DetailPanel {
+  private shownId: string | null = null;
+
   constructor(
     private container: HTMLElement,
     private store: GraphStore,
@@ -18,16 +20,46 @@ export class DetailPanel {
     this.render();
   }
 
+  // Flush an uncommitted edit of the previously-shown node before the panel
+  // rebuilds for a different selection (e.g. a canvas click that doesn't
+  // blur the notes/tags inputs). No-op if nothing was shown, or if that
+  // node was deleted in the meantime.
+  private flushPendingEdits(): void {
+    const oldId = this.shownId;
+    if (oldId === null) return;
+    const oldNode = this.store.state.nodes.get(oldId);
+    if (!oldNode) return;
+
+    const notesEl = this.container.querySelector<HTMLTextAreaElement>('#dp-notes');
+    if (notesEl && notesEl.value !== oldNode.notes) {
+      this.store.apply(setNotes(oldId, notesEl.value));
+    }
+
+    const tagsEl = this.container.querySelector<HTMLInputElement>('#dp-tags');
+    if (tagsEl) {
+      const tags = tagsEl.value.split(',').map((t) => t.trim()).filter((t) => t !== '');
+      const changed = tags.length !== oldNode.tags.length || tags.some((t, i) => t !== oldNode.tags[i]);
+      if (changed) this.store.apply(setTags(oldId, tags));
+    }
+  }
+
   private render(): void {
     const id = this.selection.get();
     const node = id !== null ? this.store.state.nodes.get(id) : undefined;
+
+    if (id !== this.shownId) {
+      this.flushPendingEdits();
+    } else {
+      const active = document.activeElement;
+      if (this.container.contains(active) && (active instanceof HTMLTextAreaElement || active instanceof HTMLInputElement)) {
+        return; // don't clobber an in-progress edit of the same node
+      }
+    }
+
     if (id === null || !node) {
+      this.shownId = null;
       this.container.innerHTML = '<div class="dp-empty">no node selected</div>';
       return;
-    }
-    const active = document.activeElement;
-    if (this.container.contains(active) && (active instanceof HTMLTextAreaElement || active instanceof HTMLInputElement)) {
-      return; // don't clobber an in-progress edit
     }
     this.container.innerHTML = `
       <h3 class="dp-label"></h3>
@@ -99,6 +131,7 @@ export class DetailPanel {
           filePreview.textContent = `cannot read file: ${err.message}`;
         });
     }
+    this.shownId = id;
   }
 
   private renderMarkdown(el: HTMLElement, md: string): void {
