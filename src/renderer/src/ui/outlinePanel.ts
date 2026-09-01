@@ -39,6 +39,7 @@ export class OutlinePanel {
     if (this.rendering) return;
     this.rendering = true;
     try {
+      const hadFocus = this.container.contains(document.activeElement);
       if (this.rootId !== null && !this.store.state.nodes.has(this.rootId)) this.rootId = null;
       this.renderRootSelector();
       this.items = projectOutline(this.store.state, this.rootId);
@@ -63,9 +64,7 @@ export class OutlinePanel {
         }
         this.listEl.appendChild(row);
       });
-      const active = document.activeElement;
-      const editing = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement;
-      if (selectedRow && !editing) (selectedRow as HTMLElement).focus();
+      if (selectedRow && hadFocus) (selectedRow as HTMLElement).focus();
     } finally {
       this.rendering = false;
     }
