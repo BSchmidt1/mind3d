@@ -62,4 +62,37 @@ describe('projectOutline', () => {
     expect(projectOutline(s, null)).toEqual([]);
     expect(() => projectOutline(s, 'ghost')).toThrow(/no such node/);
   });
+
+  test('100-node chain projects without exceeding depth limit', () => {
+    const s = emptyState();
+    const ids: string[] = [];
+    for (let i = 0; i < 100; i++) {
+      const n = createNode(`node${i}`);
+      s.nodes.set(n.id, n);
+      ids.push(n.id);
+    }
+    for (let i = 0; i < 99; i++) {
+      const e = createEdge(ids[i]!, ids[i + 1]!);
+      s.edges.set(e.id, e);
+    }
+    const items = projectOutline(s, ids[0]!);
+    expect(items).toHaveLength(100);
+    expect(items[0]!.depth).toBe(0);
+    expect(items[99]!.depth).toBe(99);
+  });
+
+  test('5002-node chain exceeds depth limit and throws', () => {
+    const s = emptyState();
+    const ids: string[] = [];
+    for (let i = 0; i < 5002; i++) {
+      const n = createNode(`node${i}`);
+      s.nodes.set(n.id, n);
+      ids.push(n.id);
+    }
+    for (let i = 0; i < 5001; i++) {
+      const e = createEdge(ids[i]!, ids[i + 1]!);
+      s.edges.set(e.id, e);
+    }
+    expect(() => projectOutline(s, ids[0]!)).toThrow(/depth exceeds 5000/);
+  });
 });

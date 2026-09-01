@@ -7,6 +7,8 @@ export interface OutlineItem {
   edgeId: string | null;
 }
 
+const MAX_OUTLINE_DEPTH = 5000;
+
 export function projectOutline(state: GraphState, rootId: string | null): OutlineItem[] {
   if (rootId !== null && !state.nodes.has(rootId)) {
     throw new Error(`projectOutline: no such node "${rootId}"`);
@@ -20,6 +22,9 @@ export function projectOutline(state: GraphState, rootId: string | null): Outlin
   const items: OutlineItem[] = [];
   const visited = new Set<string>();
   const visit = (id: string, depth: number, edgeId: string | null): void => {
+    if (depth > MAX_OUTLINE_DEPTH) {
+      throw new Error(`projectOutline: depth exceeds ${MAX_OUTLINE_DEPTH} at node "${id}" — graph too deep to outline`);
+    }
     visited.add(id);
     items.push({ nodeId: id, depth, kind: 'tree', edgeId });
     for (const e of out.get(id) ?? []) {
