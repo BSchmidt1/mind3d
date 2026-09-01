@@ -3,6 +3,7 @@ import { Selection } from './core/selection';
 import { View3D } from './ui/view3d';
 import { fuzzyScore } from './core/fuzzy';
 import { OutlinePanel } from './ui/outlinePanel';
+import { DetailPanel } from './ui/detailPanel';
 
 export const store = new GraphStore();
 export const selection = new Selection();
@@ -83,3 +84,4 @@ window.addEventListener('keydown', (ev) => {
 });
 
 new OutlinePanel(document.getElementById('outline-panel')!, store, selection);
+new DetailPanel(document.getElementById('detail-panel')!, store, selection);
