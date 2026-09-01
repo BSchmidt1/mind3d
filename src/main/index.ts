@@ -14,7 +14,7 @@ function createWindow(): void {
     height: 1000,
     title: 'mind3d',
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: join(__dirname, '../preload/index.mjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false
@@ -46,7 +46,7 @@ app.on('before-quit', (e) => {
     app.quit();
   };
   ipcMain.once('save-done', finish);
-  setTimeout(finish, 1500);
+  setTimeout(finish, 5000);
 });
 
 app.whenReady().then(createWindow);

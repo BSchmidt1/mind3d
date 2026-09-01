@@ -1,4 +1,4 @@
-import { dialog, ipcMain, shell } from 'electron';
+import { app, dialog, ipcMain, shell } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { BrowserWindow } from 'electron';
@@ -42,6 +42,12 @@ export function registerPersistenceIpc(getWindow: () => BrowserWindow | null): v
     rotateBackups(target);
     atomicWrite(target, json);
     return target;
+  });
+
+  ipcMain.handle('map-recovery-save', (_e, json: string) => {
+    const p = path.join(app.getPath('userData'), 'recovery.json');
+    atomicWrite(p, json);
+    return p;
   });
 
   ipcMain.handle('file-pick', async () => {

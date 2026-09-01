@@ -13,6 +13,7 @@ export interface ClaudeExit {
 export interface Mind3dApi {
   openMap(): Promise<{ path: string; json: string } | null>;
   saveMap(path: string | null, json: string): Promise<string | null>;
+  saveRecovery(json: string): Promise<string>;
   pickAttachFile(): Promise<string | null>;
   readTextFile(path: string): Promise<string>;
   openExternal(url: string): Promise<void>;

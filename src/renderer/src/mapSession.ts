@@ -18,13 +18,35 @@ export class MapSession {
       this.report();
       if (this.autosaveTimer !== null) clearTimeout(this.autosaveTimer);
       this.autosaveTimer = setTimeout(() => {
-        if (this.path !== null && this.dirty) void this.save();
+        void (async (): Promise<void> => {
+          try {
+            if (this.path !== null && this.dirty) {
+              await this.save();
+            } else if (this.path === null && this.dirty) {
+              const json = serializeGraph(this.store.state, this.meta);
+              await window.mind3d.saveRecovery(json);
+              this.onState('(unsaved — recovery written)');
+            }
+          } catch (err) {
+            this.onState(`ERROR: autosave failed: ${(err as Error).message}`);
+          }
+        })();
       }, 2000);
     });
     window.mind3d.onSaveRequested(() => {
       void (async (): Promise<void> => {
-        if (this.path !== null && this.dirty) await this.save();
-        window.mind3d.saveDone();
+        try {
+          if (this.path !== null && this.dirty) {
+            await this.save();
+          } else if (this.path === null && this.dirty) {
+            const json = serializeGraph(this.store.state, this.meta);
+            await window.mind3d.saveRecovery(json);
+          }
+        } catch (err) {
+          this.onState(`ERROR: quit-save failed: ${(err as Error).message}`);
+        } finally {
+          window.mind3d.saveDone();
+        }
       })();
     });
     this.report();
@@ -61,6 +83,10 @@ export class MapSession {
   }
 
   async save(): Promise<void> {
+    if (this.autosaveTimer !== null) {
+      clearTimeout(this.autosaveTimer);
+      this.autosaveTimer = null;
+    }
     this.meta.modifiedAt = new Date().toISOString();
     if (this.path !== null) this.meta.name = this.path.replace(/^.*\//, '').replace(/\.json$/, '');
     const json = serializeGraph(this.store.state, this.meta);

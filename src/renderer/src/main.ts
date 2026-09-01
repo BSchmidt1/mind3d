@@ -111,8 +111,16 @@ document.getElementById('btn-save')!.addEventListener('click', () => guard(() =>
 
 window.addEventListener('keydown', (ev) => {
   if (!ev.ctrlKey) return;
-  if (ev.key === 's') { ev.preventDefault(); guard(() => session.save()); }
-  if (ev.key === 'o') { ev.preventDefault(); guard(() => session.open()); }
+  if (ev.key === 's') {
+    ev.preventDefault();
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    guard(() => session.save());
+  }
+  if (ev.key === 'o') {
+    ev.preventDefault();
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    guard(() => session.open());
+  }
 });
 
 // --- freeze/release + counts in status ---

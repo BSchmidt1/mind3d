@@ -4,6 +4,7 @@ import type { ClaudeChunk, ClaudeExit, Mind3dApi } from '../shared/ipc';
 const api: Mind3dApi = {
   openMap: () => ipcRenderer.invoke('map-open'),
   saveMap: (path, json) => ipcRenderer.invoke('map-save', path, json),
+  saveRecovery: (json) => ipcRenderer.invoke('map-recovery-save', json),
   pickAttachFile: () => ipcRenderer.invoke('file-pick'),
   readTextFile: (path) => ipcRenderer.invoke('file-read', path),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
