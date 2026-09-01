@@ -116,7 +116,11 @@ function guard(fn: () => void | Promise<void>): void {
   })();
 }
 
-document.getElementById('btn-new')!.addEventListener('click', () => guard(() => session.newMap()));
+document.getElementById('btn-new')!.addEventListener('click', () =>
+  guard(() => {
+    setStatus(session.newMap() ? 'new map' : 'kept current map');
+  })
+);
 document.getElementById('btn-open')!.addEventListener('click', () => guard(() => session.open()));
 document.getElementById('btn-save')!.addEventListener('click', () => guard(() => session.save()));
 

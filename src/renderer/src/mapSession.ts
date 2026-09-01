@@ -66,13 +66,14 @@ export class MapSession {
     this.onState(`${file}${this.dirty ? ' *' : ''}`);
   }
 
-  newMap(): void {
-    if (this.store.state.nodes.size > 0 && !confirm('Discard current map?')) return;
+  newMap(): boolean {
+    if (this.store.state.nodes.size > 0 && !confirm('Discard current map?')) return false;
     this.path = null;
     this.meta = this.freshMeta();
     this.store.loadState(emptyState());
     this.dirty = false;
     this.report();
+    return true;
   }
 
   async open(): Promise<void> {
