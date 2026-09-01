@@ -3,6 +3,7 @@ import DOMPurify from 'dompurify';
 import type { GraphStore } from '../core/store';
 import type { Selection } from '../core/selection';
 import { setAttachedFile, setColor, setNotes, setTags } from '../core/commands';
+import { mountClaudeSection } from './claudeSection';
 
 export class DetailPanel {
   private shownId: string | null = null;
@@ -136,6 +137,12 @@ export class DetailPanel {
           filePreview.textContent = `cannot read file: ${err.message}`;
         });
     }
+    mountClaudeSection(
+      this.container.querySelector('#claude-section')!,
+      id,
+      this.store,
+      async () => '/tmp'   // replaced in Task 10 with the map file's directory
+    );
     this.shownId = id;
   }
 

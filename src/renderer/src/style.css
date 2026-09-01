@@ -29,3 +29,6 @@ body { margin: 0; background: #14181f; color: #dfe6ee; font: 13px/1.45 system-ui
 .markdown { background: #10141a; border-radius: 4px; padding: 6px 10px; margin-top: 6px; overflow-x: auto; }
 .markdown a { color: #6fb3ff; }
 #detail-panel button { background: #2a3340; color: #dfe6ee; border: 1px solid #3a4656; border-radius: 4px; padding: 2px 8px; cursor: pointer; }
+#cs-prompt { width: 100%; background: #10141a; color: #dfe6ee; border: 1px solid #3a4656; border-radius: 4px; padding: 4px; box-sizing: border-box; }
+#cs-output { background: #0c0f14; border-radius: 4px; padding: 8px; white-space: pre-wrap; max-height: 260px; overflow-y: auto; }
+#cs-state { color: #8fa1b8; }

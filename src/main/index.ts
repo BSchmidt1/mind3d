@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { join } from 'node:path';
 import { registerPersistenceIpc } from './persistence';
+import { registerClaudeIpc } from './claudeRunner';
 
 let win: BrowserWindow | null = null;
 export function getWindow(): BrowserWindow | null {
@@ -30,6 +31,7 @@ function createWindow(): void {
 }
 
 registerPersistenceIpc(getWindow);
+registerClaudeIpc();
 
 let quitReady = false;
 app.on('before-quit', (e) => {
