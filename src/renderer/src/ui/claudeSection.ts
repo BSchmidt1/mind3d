@@ -6,14 +6,14 @@ const running = new Set<string>();
 const buffers = new Map<string, string>();
 let listenersInstalled = false;
 let currentStore: GraphStore | null = null;
-const rerenderHooks = new Set<() => void>();
+const rerenderHooks = new Map<string, () => void>();
 
 function installListeners(): void {
   if (listenersInstalled) return;
   listenersInstalled = true;
   window.mind3d.onClaudeChunk((c: ClaudeChunk) => {
     buffers.set(c.runId, (buffers.get(c.runId) ?? '') + c.text);
-    for (const fn of rerenderHooks) fn();
+    for (const fn of rerenderHooks.values()) fn();
   });
   window.mind3d.onClaudeExit((e: ClaudeExit) => {
     running.delete(e.runId);
@@ -25,7 +25,7 @@ function installListeners(): void {
       store.apply(setClaudeResult(e.runId, { text, timestamp: new Date().toISOString() }));
     }
     buffers.delete(e.runId);
-    for (const fn of rerenderHooks) fn();
+    for (const fn of rerenderHooks.values()) fn();
   });
 }
 
@@ -57,13 +57,17 @@ export function mountClaudeSection(
     if (v !== node.claudePrompt) store.apply(setClaudePrompt(nodeId, v));
   });
   const outEl = host.querySelector<HTMLElement>('#cs-output')!;
+  const runBtn = host.querySelector<HTMLButtonElement>('#cs-run')!;
+  const killBtn = host.querySelector<HTMLButtonElement>('#cs-kill')!;
+  const stateEl = host.querySelector<HTMLElement>('#cs-state')!;
   if (isRunning) {
     outEl.textContent = buffers.get(nodeId) ?? '';
   } else if (node.claudeResult !== null) {
     outEl.textContent = `[${node.claudeResult.timestamp}]\n${node.claudeResult.text}`;
   }
-  host.querySelector('#cs-run')!.addEventListener('click', () => {
+  runBtn.addEventListener('click', () => {
     void (async (): Promise<void> => {
+      if (running.has(nodeId)) return;
       const prompt = promptEl.value.trim();
       if (prompt === '') {
         outEl.textContent = 'empty prompt — nothing to run';
@@ -76,16 +80,20 @@ export function mountClaudeSection(
       running.add(nodeId);
       buffers.set(nodeId, '');
       window.mind3d.runClaude(nodeId, prompt, cwd);
-      for (const fn of rerenderHooks) fn();
+      for (const fn of rerenderHooks.values()) fn();
     })();
   });
-  host.querySelector('#cs-kill')!.addEventListener('click', () => {
+  killBtn.addEventListener('click', () => {
     window.mind3d.killClaude(nodeId);
   });
   const hook = (): void => {
-    if (running.has(nodeId)) {
+    const isRunningNow = running.has(nodeId);
+    runBtn.disabled = isRunningNow;
+    killBtn.disabled = !isRunningNow;
+    stateEl.textContent = isRunningNow ? 'running…' : '';
+    if (isRunningNow) {
       outEl.textContent = buffers.get(nodeId) ?? '';
     }
   };
-  rerenderHooks.add(hook);
+  rerenderHooks.set(nodeId, hook);
 }
