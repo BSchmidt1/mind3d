@@ -95,7 +95,12 @@ export class DetailPanel {
     tagsEl.value = node.tags.join(', ');
     tagsEl.addEventListener('blur', () => {
       const tags = tagsEl.value.split(',').map((t) => t.trim()).filter((t) => t !== '');
-      this.store.apply(setTags(id, tags));
+      // Diff-check (mirrors the notes guard below): also prevents a stale
+      // blur, fired by DOM teardown after flushPendingEdits already
+      // committed this same value, or after the node was since deleted,
+      // from re-applying an identical/invalid setTags.
+      const changed = tags.length !== node.tags.length || tags.some((t, i) => t !== node.tags[i]);
+      if (changed) this.store.apply(setTags(id, tags));
     });
 
     const notesEl = this.container.querySelector<HTMLTextAreaElement>('#dp-notes')!;
