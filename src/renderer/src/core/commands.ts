@@ -91,17 +91,25 @@ export function addEdge(edge: MindEdge): Command {
 
 export function deleteEdge(id: string): Command {
   let removed: MindEdge | undefined;
+  let edgeOrder: string[] = [];
   return {
     name: 'deleteEdge',
     kind: 'structure',
     ids: [id],
     execute(s) {
       removed = reqEdge(s, id);
+      edgeOrder = [...s.edges.keys()];
       s.edges.delete(id);
     },
     undo(s) {
       const e = must(removed, 'deleteEdge');
-      s.edges.set(e.id, e);
+      const rebuilt = new Map<string, MindEdge>();
+      for (const eid of edgeOrder) {
+        const edge = eid === e.id ? e : s.edges.get(eid);
+        if (edge) rebuilt.set(eid, edge);
+      }
+      s.edges.clear();
+      for (const [k, v] of rebuilt) s.edges.set(k, v);
     }
   };
 }
@@ -217,7 +225,19 @@ export function composite(name: string, cmds: Command[]): Command {
     kind,
     ids: [...new Set(cmds.flatMap((c) => c.ids))],
     execute(s) {
-      for (const c of cmds) c.execute(s);
+      const executed: Command[] = [];
+      try {
+        for (const c of cmds) {
+          c.execute(s);
+          executed.push(c);
+        }
+      } catch (err) {
+        // Rollback already-executed commands in reverse order
+        for (const c of executed.reverse()) {
+          c.undo(s);
+        }
+        throw err;
+      }
     },
     undo(s) {
       for (const c of [...cmds].reverse()) c.undo(s);
