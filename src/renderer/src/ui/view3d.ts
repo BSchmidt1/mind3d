@@ -210,6 +210,11 @@ export class View3D {
       (el instanceof HTMLElement && el.isContentEditable);
   }
 
+  private focusInOutlinePanel(): boolean {
+    const el = document.activeElement;
+    return el instanceof HTMLElement && el.closest('#outline-panel') !== null;
+  }
+
   private handleKey(ev: KeyboardEvent): void {
     if (this.typingInInput()) return;
     const sel = this.selection.get();
@@ -225,7 +230,7 @@ export class View3D {
         if (sel !== null) this.togglePin(sel);
         break;
       case 'Tab':
-        if (sel !== null) {
+        if (sel !== null && !ev.shiftKey && !this.focusInOutlinePanel()) {
           ev.preventDefault();
           this.addChild(sel);
         }

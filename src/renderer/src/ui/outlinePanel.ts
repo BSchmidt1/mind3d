@@ -11,6 +11,7 @@ export class OutlinePanel {
   private items: OutlineItem[] = [];
   private listEl: HTMLElement;
   private rootSel: HTMLSelectElement;
+  private rendering = false;
 
   constructor(
     private container: HTMLElement,
@@ -35,26 +36,39 @@ export class OutlinePanel {
   }
 
   private render(): void {
-    if (this.rootId !== null && !this.store.state.nodes.has(this.rootId)) this.rootId = null;
-    this.renderRootSelector();
-    this.items = projectOutline(this.store.state, this.rootId);
-    this.listEl.innerHTML = '';
-    this.items.forEach((item, idx) => {
-      const node = this.store.state.nodes.get(item.nodeId);
-      if (!node) throw new Error(`outline references missing node "${item.nodeId}"`);
-      const row = document.createElement('div');
-      row.className = `outline-row ${item.kind}`;
-      if (this.selection.get() === item.nodeId && item.kind === 'tree') row.classList.add('selected');
-      row.tabIndex = 0;
-      row.style.paddingLeft = `${8 + item.depth * 16}px`;
-      row.textContent = (item.kind === 'mirror' ? '↪ ' : '• ') + (node.label || '(unnamed)');
-      row.addEventListener('click', () => this.selection.set(item.nodeId));
-      if (item.kind === 'tree') {
-        row.addEventListener('dblclick', () => this.beginEdit(row, item));
-        row.addEventListener('keydown', (ev) => this.handleRowKey(ev, item, idx));
-      }
-      this.listEl.appendChild(row);
-    });
+    if (this.rendering) return;
+    this.rendering = true;
+    try {
+      if (this.rootId !== null && !this.store.state.nodes.has(this.rootId)) this.rootId = null;
+      this.renderRootSelector();
+      this.items = projectOutline(this.store.state, this.rootId);
+      this.listEl.innerHTML = '';
+      let selectedRow: HTMLElement | null = null;
+      this.items.forEach((item, idx) => {
+        const node = this.store.state.nodes.get(item.nodeId);
+        if (!node) throw new Error(`outline references missing node "${item.nodeId}"`);
+        const row = document.createElement('div');
+        row.className = `outline-row ${item.kind}`;
+        if (this.selection.get() === item.nodeId && item.kind === 'tree') {
+          row.classList.add('selected');
+          selectedRow = row;
+        }
+        row.tabIndex = 0;
+        row.style.paddingLeft = `${8 + item.depth * 16}px`;
+        row.textContent = (item.kind === 'mirror' ? '↪ ' : '• ') + (node.label || '(unnamed)');
+        row.addEventListener('click', () => this.selection.set(item.nodeId));
+        if (item.kind === 'tree') {
+          row.addEventListener('dblclick', () => this.beginEdit(row, item));
+          row.addEventListener('keydown', (ev) => this.handleRowKey(ev, item, idx));
+        }
+        this.listEl.appendChild(row);
+      });
+      const active = document.activeElement;
+      const editing = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement;
+      if (selectedRow && !editing) (selectedRow as HTMLElement).focus();
+    } finally {
+      this.rendering = false;
+    }
   }
 
   private renderRootSelector(): void {
@@ -113,6 +127,7 @@ export class OutlinePanel {
   private handleRowKey(ev: KeyboardEvent, item: OutlineItem, idx: number): void {
     if (ev.key === 'Enter') {
       ev.preventDefault();
+      ev.stopPropagation();
       const child = createNode('');
       const parentEdge = item.edgeId !== null ? this.store.state.edges.get(item.edgeId) : undefined;
       if (parentEdge) {
@@ -132,6 +147,7 @@ export class OutlinePanel {
     }
     if (ev.key === 'Tab' && !ev.shiftKey) {
       ev.preventDefault();
+      ev.stopPropagation();
       const prev = this.prevTreeSiblingOf(idx);
       if (!prev) return;
       if (item.edgeId !== null) this.store.apply(reparent(item.edgeId, prev.nodeId));
@@ -140,6 +156,7 @@ export class OutlinePanel {
     }
     if (ev.key === 'Tab' && ev.shiftKey) {
       ev.preventDefault();
+      ev.stopPropagation();
       if (item.edgeId === null) return;
       const parent = this.treeParentOf(idx);
       if (!parent) return;
