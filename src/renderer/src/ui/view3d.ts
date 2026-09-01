@@ -7,6 +7,7 @@ import {
   addEdge, addNode, composite, deleteNode, freezeAll, releaseAll, setLabel, setPosition
 } from '../core/commands';
 import { createEdge, createNode } from '../core/model';
+import { nHopNeighborhood } from '../core/neighborhood';
 
 interface SimNode {
   id: string;
@@ -31,7 +32,7 @@ export class View3D {
   private focusMode = false;
   private focusSet: Set<string> | null = null;
   private keyMoveActive = false;
-  private keyMoveStart: [number, number, number] | null = null;
+  private keyMoveNodeId: string | null = null;
   private pendingSpawn = new Map<string, { x: number; y: number; z: number }>();
   private labelInput: HTMLInputElement;
 
@@ -69,6 +70,7 @@ export class View3D {
       node.fx = p.x;
       node.fy = p.y;
       node.fz = p.z;
+      this.pendingSpawn.set(node.id, p);
       this.store.apply(addNode(node));
       this.selection.set(node.id);
       this.beginLabelEdit(node.id);
@@ -160,14 +162,7 @@ export class View3D {
       this.focusSet = null;
       return;
     }
-    const hops = new Set<string>([sel]);
-    for (let i = 0; i < 2; i++) {
-      for (const e of this.store.state.edges.values()) {
-        if (hops.has(e.source)) hops.add(e.target);
-        if (hops.has(e.target)) hops.add(e.source);
-      }
-    }
-    this.focusSet = hops;
+    this.focusSet = nHopNeighborhood(this.store.state.edges.values(), sel, 2);
   }
 
   private handleNodeClick(id: string): void {
@@ -221,6 +216,7 @@ export class View3D {
     const arrows = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
     if (arrows.includes(ev.key) && sel !== null) {
       ev.preventDefault();
+      if (this.keyMoveActive && this.keyMoveNodeId !== sel) return;
       this.keyMove(sel, ev.key, ev.shiftKey);
       return;
     }
@@ -279,7 +275,7 @@ export class View3D {
     if (key === 'ArrowDown') d = shift ? fwd.multiplyScalar(-MOVE_STEP) : up.multiplyScalar(-MOVE_STEP);
     if (!this.keyMoveActive) {
       this.keyMoveActive = true;
-      this.keyMoveStart = [sim.x ?? 0, sim.y ?? 0, sim.z ?? 0];
+      this.keyMoveNodeId = id;
     }
     sim.fx = (sim.fx ?? sim.x ?? 0) + d.x;
     sim.fy = (sim.fy ?? sim.y ?? 0) + d.y;
@@ -293,13 +289,13 @@ export class View3D {
   private handleKeyUp(ev: KeyboardEvent): void {
     if (!this.keyMoveActive) return;
     if (!ev.key.startsWith('Arrow')) return;
-    const sel = this.selection.get();
+    const id = this.keyMoveNodeId;
     this.keyMoveActive = false;
-    this.keyMoveStart = null;
-    if (sel === null) return;
-    const sim = this.simNodes.find((n) => n.id === sel);
+    this.keyMoveNodeId = null;
+    if (id === null) return;
+    const sim = this.simNodes.find((n) => n.id === id);
     if (!sim) return;
-    this.store.apply(setPosition(sel, sim.fx ?? 0, sim.fy ?? 0, sim.fz ?? 0));
+    this.store.apply(setPosition(id, sim.fx ?? 0, sim.fy ?? 0, sim.fz ?? 0));
   }
 
   private togglePin(id: string): void {
@@ -316,7 +312,8 @@ export class View3D {
 
   private addChild(parentId: string): void {
     const sim = this.simNodes.find((n) => n.id === parentId);
-    const base = sim ? { x: sim.x ?? 0, y: sim.y ?? 0, z: sim.z ?? 0 } : { x: 0, y: 0, z: 0 };
+    if (!sim) throw new Error(`addChild: node "${parentId}" not in simulation`);
+    const base = { x: sim.x ?? 0, y: sim.y ?? 0, z: sim.z ?? 0 };
     const child = createNode('new node');
     this.pendingSpawn.set(child.id, {
       x: base.x + 20 * (Math.random() - 0.5),
@@ -332,9 +329,8 @@ export class View3D {
     const m = this.store.state.nodes.get(id);
     if (!m) throw new Error(`beginLabelEdit: no such node "${id}"`);
     const sim = this.simNodes.find((n) => n.id === id);
-    const coords = sim
-      ? this.graph.graph2ScreenCoords(sim.x ?? 0, sim.y ?? 0, sim.z ?? 0)
-      : { x: 40, y: 40 };
+    if (!sim) throw new Error(`beginLabelEdit: node "${id}" not in simulation`);
+    const coords = this.graph.graph2ScreenCoords(sim.x ?? 0, sim.y ?? 0, sim.z ?? 0);
     this.labelInput.value = m.label;
     this.labelInput.style.left = `${coords.x}px`;
     this.labelInput.style.top = `${coords.y + 12}px`;
