@@ -36,6 +36,10 @@ export class MapSession {
     window.mind3d.onSaveRequested(() => {
       void (async (): Promise<void> => {
         try {
+          // Commit a typed-but-unblurred edit (notes/tags/claude prompt)
+          // into the store before checking dirty/serializing, same as
+          // main.ts's Ctrl+S — otherwise closing the window mid-edit loses it.
+          if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
           if (this.path !== null && this.dirty) {
             await this.save();
           } else if (this.path === null && this.dirty) {

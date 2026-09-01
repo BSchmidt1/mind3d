@@ -9,6 +9,17 @@ import { MapSession } from './mapSession';
 export const store = new GraphStore();
 export const selection = new Selection();
 
+// Undo/redo (or any other structural change) can remove the currently
+// selected node. Clear a selection left dangling on a deleted node before
+// any other store subscriber (View3D's rebuild, panels) reacts to the same
+// event — registering first means selection.set(null)'s own listeners run
+// and settle before View3D rebuilds against the now-consistent selection.
+store.subscribe((ev) => {
+  if (ev.kind !== 'structure') return;
+  const sel = selection.get();
+  if (sel !== null && !store.state.nodes.has(sel)) selection.set(null);
+});
+
 document.body.innerHTML = `
   <div id="topbar">
     <button id="btn-new">New</button>

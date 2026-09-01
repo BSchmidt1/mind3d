@@ -2,7 +2,7 @@ import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import type { GraphStore } from '../core/store';
 import type { Selection } from '../core/selection';
-import { setAttachedFile, setColor, setNotes, setTags } from '../core/commands';
+import { setAttachedFile, setClaudePrompt, setColor, setNotes, setTags } from '../core/commands';
 import { mountClaudeSection } from './claudeSection';
 
 export class DetailPanel {
@@ -55,6 +55,13 @@ export class DetailPanel {
       const tags = tagsEl.value.split(',').map((t) => t.trim()).filter((t) => t !== '');
       const changed = tags.length !== oldNode.tags.length || tags.some((t, i) => t !== oldNode.tags[i]);
       if (changed) this.store.apply(setTags(oldId, tags));
+    }
+
+    const promptEl = this.container.querySelector<HTMLTextAreaElement>('#cs-prompt');
+    if (promptEl) {
+      // Same empty-string <-> null normalization as claudeSection's blur handler.
+      const v = promptEl.value === '' ? null : promptEl.value;
+      if (v !== oldNode.claudePrompt) this.store.apply(setClaudePrompt(oldId, v));
     }
   }
 
@@ -173,5 +180,27 @@ export class DetailPanel {
   private renderMarkdown(el: HTMLElement, md: string): void {
     const html = marked.parse(md, { async: false });
     el.innerHTML = DOMPurify.sanitize(html);
+    // DOMPurify keeps <a href>; without this a click would navigate the
+    // whole window (blocked at the main-process level as a backstop, but
+    // that leaves the link dead). Route http/https links through the
+    // allowlisted openExternal IPC instead; ignore other schemes.
+    el.addEventListener('click', (ev) => {
+      const target = ev.target;
+      if (!(target instanceof Element)) return;
+      const a = target.closest('a');
+      if (!a || !el.contains(a)) return;
+      ev.preventDefault();
+      const href = a.getAttribute('href');
+      if (href === null) return;
+      let url: URL;
+      try {
+        url = new URL(href);
+      } catch {
+        return;
+      }
+      if (url.protocol === 'http:' || url.protocol === 'https:') {
+        void window.mind3d.openExternal(href);
+      }
+    });
   }
 }
