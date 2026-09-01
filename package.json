@@ -13,6 +13,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.19.43",
+    "@types/three": "^0.185.4",
     "electron": "^33.4.11",
     "electron-vite": "^2.3.0",
     "typescript": "^5.9.3",
