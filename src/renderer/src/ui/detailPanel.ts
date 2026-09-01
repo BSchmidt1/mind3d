@@ -147,9 +147,17 @@ export class DetailPanel {
     if (node.attachedFile !== null) {
       window.mind3d
         .readTextFile(node.attachedFile)
-        .then((text) => this.renderMarkdown(filePreview, text))
+        .then((text) => {
+          this.renderMarkdown(filePreview, text);
+          // Height changed (markdown filled in) after the scrollTop restore
+          // below already ran; re-apply it now, but only if this is still
+          // the shown node — a stale resolve for a since-switched node must
+          // not yank the current scroll position.
+          if (this.shownId === id) this.container.scrollTop = scrollTop;
+        })
         .catch((err: Error) => {
           filePreview.textContent = `cannot read file: ${err.message}`;
+          if (this.shownId === id) this.container.scrollTop = scrollTop;
         });
     }
     mountClaudeSection(
