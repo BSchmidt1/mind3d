@@ -1,2 +1,26 @@
-import { contextBridge } from 'electron';
-contextBridge.exposeInMainWorld('mind3d', {});
+import { contextBridge, ipcRenderer } from 'electron';
+import type { ClaudeChunk, ClaudeExit, Mind3dApi } from '../shared/ipc';
+
+const api: Mind3dApi = {
+  openMap: () => ipcRenderer.invoke('map-open'),
+  saveMap: (path, json) => ipcRenderer.invoke('map-save', path, json),
+  pickAttachFile: () => ipcRenderer.invoke('file-pick'),
+  readTextFile: (path) => ipcRenderer.invoke('file-read', path),
+  openExternal: (url) => ipcRenderer.invoke('open-external', url),
+  openPath: (path) => ipcRenderer.invoke('open-path', path),
+  dirname: (path) => ipcRenderer.invoke('path-dirname', path),
+  runClaude: (runId, prompt, cwd) => ipcRenderer.send('claude-run', runId, prompt, cwd),
+  killClaude: (runId) => ipcRenderer.send('claude-kill', runId),
+  onClaudeChunk: (cb) => {
+    ipcRenderer.on('claude-chunk', (_e, c: ClaudeChunk) => cb(c));
+  },
+  onClaudeExit: (cb) => {
+    ipcRenderer.on('claude-exit', (_e, ex: ClaudeExit) => cb(ex));
+  },
+  onSaveRequested: (cb) => {
+    ipcRenderer.on('save-requested', () => cb());
+  },
+  saveDone: () => ipcRenderer.send('save-done')
+};
+
+contextBridge.exposeInMainWorld('mind3d', api);
