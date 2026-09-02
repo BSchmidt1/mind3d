@@ -60,3 +60,23 @@ body { margin: 0; background: #14181f; color: #dfe6ee; font: 13px/1.45 system-ui
 
 #file-state { color: #8fa1b8; margin-left: 8px; }
 #help-overlay { position: fixed; inset: 15% 25%; background: #1b212b; border: 1px solid #3a4656; border-radius: 8px; padding: 16px 24px; z-index: 100; box-shadow: 0 8px 40px #000a; }
+
+#cmd-palette {
+  position: fixed; top: 12%; left: 50%; transform: translateX(-50%);
+  width: min(560px, 90vw); background: #1b212b; border: 1px solid #3a4656;
+  border-radius: 8px; z-index: 150; box-shadow: 0 8px 40px #000a; overflow: hidden;
+}
+#cmd-palette[hidden] { display: none; }
+#cmd-input {
+  width: 100%; box-sizing: border-box; background: #10141a; color: #dfe6ee;
+  border: none; border-bottom: 1px solid #3a4656; padding: 10px 12px; font: inherit;
+  outline: none;
+}
+.cmd-list { max-height: 320px; overflow-y: auto; }
+.cmd-row {
+  display: flex; justify-content: space-between; gap: 12px; padding: 6px 12px;
+  cursor: pointer; white-space: nowrap; overflow: hidden;
+}
+.cmd-row .cmd-title { overflow: hidden; text-overflow: ellipsis; }
+.cmd-row.active, .cmd-row:hover { background: #2c3a4d; }
+.cmd-hint { color: #8fa1b8; flex-shrink: 0; }

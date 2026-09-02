@@ -7,6 +7,8 @@ import { DetailPanel } from './ui/detailPanel';
 import { MapSession } from './mapSession';
 import { VoicePanel } from './ui/voicePanel';
 import { initNotify, notify } from './ui/notify';
+import { CommandRegistry } from './core/commandRegistry';
+import { CommandPalette } from './ui/commandPalette';
 
 export const store = new GraphStore();
 export const selection = new Selection();
@@ -47,6 +49,13 @@ initNotify(document.getElementById('toast-host')!);
 export function setStatus(msg: string): void {
   notify.info(msg);
 }
+
+// --- command palette (Ctrl+K) ---
+// The anti-top-bar-bloat mechanism: new actions register a PaletteCommand
+// here instead of growing #topbar. Later tasks (F3b+) import `registry` and
+// register their own commands.
+export const registry = new CommandRegistry();
+new CommandPalette(registry);
 
 const statusCountsEl = document.getElementById('status-counts')!;
 
@@ -152,14 +161,25 @@ function guard(fn: () => void | Promise<void>): void {
   })();
 }
 
-document.getElementById('btn-new')!.addEventListener('click', () =>
+function doNewMap(): void {
   guard(() => {
     if (session.newMap()) notify.success('new map');
     else notify.info('kept current map');
-  })
-);
-document.getElementById('btn-open')!.addEventListener('click', () => guard(() => session.open()));
-document.getElementById('btn-save')!.addEventListener('click', () => guard(() => session.save()));
+  });
+}
+function doOpenMap(): void {
+  guard(() => session.open());
+}
+function doSaveMap(): void {
+  guard(() => session.save());
+}
+document.getElementById('btn-new')!.addEventListener('click', doNewMap);
+document.getElementById('btn-open')!.addEventListener('click', doOpenMap);
+document.getElementById('btn-save')!.addEventListener('click', doSaveMap);
+
+registry.register({ id: 'new-map', title: 'New map', run: doNewMap });
+registry.register({ id: 'open-map', title: 'Open map', hint: 'Ctrl+O', run: doOpenMap });
+registry.register({ id: 'save-map', title: 'Save map', hint: 'Ctrl+S', run: doSaveMap });
 
 window.addEventListener('keydown', (ev) => {
   if (!ev.ctrlKey) return;
@@ -182,17 +202,42 @@ const releaseBtn = document.createElement('button');
 releaseBtn.textContent = 'Release all';
 document.getElementById('topbar')!.insertBefore(freezeBtn, fileStateEl);
 document.getElementById('topbar')!.insertBefore(releaseBtn, fileStateEl);
-freezeBtn.addEventListener('click', () => guard(() => {
-  if (store.state.nodes.size === 0) { notify.info('map is empty'); return; }
-  if (view3d.pinnedCount() === store.state.nodes.size) { notify.info('all nodes already pinned'); return; }
-  view3d.freezeAllNow();
-  notify.success('froze all nodes');
-}));
-releaseBtn.addEventListener('click', () => guard(() => {
-  if (view3d.pinnedCount() === 0) { notify.info('no pinned nodes'); return; }
-  view3d.releaseAllNow();
-  notify.success('released all nodes');
-}));
+function doFreezeAll(): void {
+  guard(() => {
+    if (store.state.nodes.size === 0) { notify.info('map is empty'); return; }
+    if (view3d.pinnedCount() === store.state.nodes.size) { notify.info('all nodes already pinned'); return; }
+    view3d.freezeAllNow();
+    notify.success('froze all nodes');
+  });
+}
+function doReleaseAll(): void {
+  guard(() => {
+    if (view3d.pinnedCount() === 0) { notify.info('no pinned nodes'); return; }
+    view3d.releaseAllNow();
+    notify.success('released all nodes');
+  });
+}
+freezeBtn.addEventListener('click', doFreezeAll);
+releaseBtn.addEventListener('click', doReleaseAll);
+
+registry.register({ id: 'freeze-all', title: 'Freeze all', run: doFreezeAll, when: () => store.state.nodes.size > 0 });
+registry.register({ id: 'release-all', title: 'Release all', run: doReleaseAll, when: () => view3d.pinnedCount() > 0 });
+registry.register({
+  id: 'toggle-focus',
+  title: 'Toggle focus mode',
+  hint: 'x',
+  run: () => view3d.toggleFocusMode()
+});
+registry.register({
+  id: 'fly-to-selection',
+  title: 'Fly to selection',
+  hint: 'f',
+  run: () => {
+    const sel = selection.get();
+    if (sel !== null) view3d.flyTo(sel);
+  },
+  when: () => selection.get() !== null
+});
 
 function updateCounts(): void {
   const s = store.state;
@@ -215,15 +260,21 @@ p                pin/unpin         e          edit label
 Delete           delete node       f          fly to selection
 x                focus mode        Ctrl+Z/Shift+Z  undo/redo
 Ctrl+S/O         save/open         ?          this help
+Ctrl+K           command palette
 outline: Enter sibling · Tab indent · Shift+Tab outdent · dblclick rename
   </pre>`;
 document.body.appendChild(help);
+function toggleHelp(): void {
+  help.hidden = !help.hidden;
+}
 window.addEventListener('keydown', (ev) => {
   if (ev.key === '?' && !(document.activeElement instanceof HTMLInputElement) &&
       !(document.activeElement instanceof HTMLTextAreaElement)) {
-    help.hidden = !help.hidden;
+    toggleHelp();
   }
 });
 help.addEventListener('click', () => { help.hidden = true; });
+
+registry.register({ id: 'show-help', title: 'Show help', hint: '?', run: toggleHelp });
 
 new DetailPanel(document.getElementById('detail-panel')!, store, selection, () => session.getMapDir());
