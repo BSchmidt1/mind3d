@@ -96,8 +96,10 @@ Three layers, thin at the edges:
     `proposalPanel.ts` (the accept/reject ghost preview), `askController.ts`
     (F4), `importController.ts` (F5), `snapshotController.ts` (F8),
     `tourController.ts` (F9), `tagBar.ts` (F11), `contextMenu.ts` (F13), and
-    `modal.ts` (`confirmModal` + the single-modal coordinator). Renderer glue for
-    the one-shot spawn is `src/renderer/src/askClaude.ts` (`askClaudeForOps`).
+    `modal.ts` (`confirmModal` + the single-modal coordinator). The one-shot
+    spawn is invoked inline as `window.mind3d.askClaude(prompt, cwd)` (from
+    `askController`/`importController`/`voicePanel`) and parsed via
+    `core/proposal.ts`'s `parseProposal`.
   - `main.ts` — wires the top bar, panels, keyboard shortcuts, map session, the
     command registry + palette, and the cross-surface glue (search, undo/redo,
     selection reconciliation). Feature installers (`installAsk`/`installImport`/
