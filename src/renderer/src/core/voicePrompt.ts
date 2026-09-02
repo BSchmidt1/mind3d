@@ -1,8 +1,4 @@
-const SCHEMA = `{ "ops": [
-    {"op":"node","tmp":"n1","label":"Funding strategy","notes":"optional markdown"},
-    {"op":"node","tmp":"n2","label":"Grants","parent":"n1"},
-    {"op":"edge","from":"n1","to":"<existing-node-id>"}
-  ], "summary":"one sentence" }`;
+import { PROPOSAL_SCHEMA } from './proposal';
 
 export function buildVoicePrompt(opts: {
   transcript: string;
@@ -12,7 +8,7 @@ export function buildVoicePrompt(opts: {
 }): string {
   const lines: string[] = [
     'You are extending a 3D mindmap. Given the user instruction below, reply with ONLY a JSON object matching this schema — no prose, no markdown fences:',
-    SCHEMA,
+    PROPOSAL_SCHEMA,
     '"tmp" ids are batch-local; "parent"/"from"/"to" resolve to either a "tmp" in this batch or an existing node id listed below. A "parent" on a node implies an edge parent -> node.',
     'Prefer attaching new nodes to the selected node (or other existing ids) when the instruction implies it. Keep labels short; put longer detail in "notes".',
     '',

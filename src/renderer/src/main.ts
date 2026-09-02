@@ -10,6 +10,7 @@ import { initNotify, notify } from './ui/notify';
 import { CommandRegistry } from './core/commandRegistry';
 import { CommandPalette } from './ui/commandPalette';
 import { ProposalPanel } from './ui/proposalPanel';
+import { installAsk } from './ui/askController';
 
 export const store = new GraphStore();
 export const selection = new Selection();
@@ -30,6 +31,7 @@ document.body.innerHTML = `
     <button id="btn-new">New</button>
     <button id="btn-open">Open</button>
     <button id="btn-save">Save</button>
+    <button id="btn-ask" title="ask Claude about this map">Ask</button>
     <button id="btn-voice" title="hold to speak">🎤</button>
     <input id="search" placeholder="search… (fly-to)" />
     <div id="search-results" hidden></div>
@@ -298,3 +300,10 @@ help.addEventListener('click', () => { help.hidden = true; });
 registry.register({ id: 'show-help', title: 'Show help', hint: '?', run: toggleHelp });
 
 new DetailPanel(document.getElementById('detail-panel')!, store, selection, () => session.getMapDir());
+
+// --- ask the map (F4) ---
+// Send the whole graph (or the selected node's neighborhood) to Claude and
+// preview the result via the shared proposal panel (adds/links) and/or a text
+// answer. Registers preset + free-text asks as Ctrl+K commands and wires the
+// #btn-ask primary.
+installAsk({ store, selection, view3d, proposalPanel, registry, session });

@@ -29,6 +29,16 @@ export interface ProposalOpSet {
   answer?: string;
 }
 
+// The canonical proposal JSON schema example. Embedded verbatim in every
+// prompt that asks Claude for an op-set (voice F6, ask F4, import F5) so all
+// callers agree on the exact shape `parseProposal` accepts. `answer` and edge
+// `label` are optional — voice simply never fills them.
+export const PROPOSAL_SCHEMA = `{ "ops": [
+    {"op":"node","tmp":"n1","label":"Funding strategy","notes":"optional markdown detail"},
+    {"op":"node","tmp":"n2","label":"Grants","parent":"n1"},
+    {"op":"edge","from":"n1","to":"<existing-node-id>","label":"optional edge label"}
+  ], "summary":"one sentence", "answer":"optional short text reply" }`;
+
 export interface Proposal {
   opSet: ProposalOpSet;
   command: Command;
