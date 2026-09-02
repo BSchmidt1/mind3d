@@ -4,3 +4,6 @@ out/
 .env
 *.log
 e2e/artifacts/
+
+# F7 throwaway spike (not committed)
+spike/

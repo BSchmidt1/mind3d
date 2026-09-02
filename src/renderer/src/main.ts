@@ -2,6 +2,7 @@ import { GraphStore } from './core/store';
 import { Selection } from './core/selection';
 import { View3D } from './ui/view3d';
 import { fuzzyScore } from './core/fuzzy';
+import { searchNodes } from './core/search';
 import { OutlinePanel } from './ui/outlinePanel';
 import { DetailPanel } from './ui/detailPanel';
 import { MapSession } from './mapSession';
@@ -111,15 +112,20 @@ searchEl.addEventListener('input', () => {
   resultsEl.innerHTML = '';
   resultsEl.hidden = q === '';
   if (q === '') return;
-  const scored = [...store.state.nodes.values()]
-    .map((n) => ({ n, s: fuzzyScore(q, n.label) }))
-    .filter((r): r is { n: (typeof r)['n']; s: number } => r.s !== null)
-    .sort((a, b) => b.s - a.s)
-    .slice(0, 8);
-  for (const { n } of scored) {
+  const hits = searchNodes(store.state, q).slice(0, 8);
+  for (const { id } of hits) {
+    const n = store.state.nodes.get(id);
+    if (!n) continue;
     const row = document.createElement('div');
     row.className = 'search-row';
     row.textContent = n.label;
+    // Flag a match that came only from notes so a notes-only hit isn't confusing.
+    if (fuzzyScore(q, n.label) === null) {
+      const badge = document.createElement('span');
+      badge.className = 'search-field';
+      badge.textContent = 'notes';
+      row.appendChild(badge);
+    }
     row.addEventListener('click', () => {
       selection.set(n.id);
       view3d.flyTo(n.id);
