@@ -50,6 +50,11 @@ export class ProposalPanel {
   }
 
   show(proposal: Proposal, opts?: { answer?: string | null }): void {
+    // Replace, don't stack: if a proposal preview is already open, clear its
+    // ghost first so the prior ghost's pendingSpawn seeds don't leak. Ask (F4)
+    // and Import (F5) may show a second proposal without an accept/reject
+    // between them.
+    if (this.current !== null) this.view3d.clearGhost();
     const anchor = this.selection.get();
     this.current = proposal;
     this.anchorId = anchor;
@@ -123,7 +128,16 @@ export class ProposalPanel {
     // clean placement from spawnNear rather than colliding with ghost sims.
     this.view3d.clearGhost();
     this.view3d.spawnNear(proposal.newNodeIds, anchor);
-    this.store.apply(proposal.command);
+    try {
+      this.store.apply(proposal.command);
+    } catch (e) {
+      // A referenced existing node may have been deleted while the card was
+      // open; the composite rolls back atomically so the store stays
+      // consistent — surface the error and close the card cleanly.
+      notify.error(`proposal: could not apply — ${(e as Error).message}`);
+      this.hide();
+      return;
+    }
     if (proposal.rootId !== null) {
       this.selection.set(proposal.rootId);
       this.view3d.flyTo(proposal.rootId);
