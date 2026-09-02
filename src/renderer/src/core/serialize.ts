@@ -216,6 +216,11 @@ function parseTour(v: unknown, ctx: string): Tour {
   const name = str(v['name'], `${c}.name`);
   if (!Array.isArray(v['stops'])) throw new Error(`${c}: "stops" must be an array`);
   const stops = v['stops'].map((s, i) => parseTourStop(s, `${c}.stops[${i}]`));
+  // A 0-stop tour is unplayable (tour-play → applyStop(_, 0) has no stop;
+  // stepTour throws /empty tour/). The app never produces one (TourBuilder and
+  // session.addTour both require ≥1 stop), so reject a hand-edited/external file
+  // that carries one — fail-fast on load rather than at play time.
+  if (stops.length === 0) throw new Error(`${c}: tour must have at least one stop`);
   return { id, name, stops };
 }
 

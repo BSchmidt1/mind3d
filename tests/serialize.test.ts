@@ -142,6 +142,16 @@ describe('serialize', () => {
     expect(() => deserializeGraph(JSON.stringify(doc))).toThrow(/tours\[0\].*kind.*weird/s);
   });
 
+  test('rejects a tour with zero stops (fail-fast)', () => {
+    // The app never writes one (builder + session.addTour both require ≥1), but
+    // a hand-edited/external file could — an empty tour is unplayable, so reject
+    // it on load rather than throwing later in the tour player.
+    const tour = createTour('t', [{ kind: 'viewpoint', ref: 'v1' }]);
+    const doc = JSON.parse(serializeGraph(sampleState(), meta, { tours: [tour] }));
+    doc.tours[0].stops = [];
+    expect(() => deserializeGraph(JSON.stringify(doc))).toThrow(/at least one stop/);
+  });
+
   test('rejects a malformed snapshot (fail-fast), naming it', () => {
     const doc = JSON.parse(serializeGraph(sampleState(), meta, { snapshots: [createSnapshot('c', sampleState())] }));
     doc.snapshots[0].bogus = 1;
