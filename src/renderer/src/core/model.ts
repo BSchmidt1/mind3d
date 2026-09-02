@@ -17,11 +17,18 @@ export interface MindNode {
   claudeResult: ClaudeResult | null;
 }
 
+// A first-class edge relation (F10): a typed semantic role for an edge,
+// rendered as link color/style and understood by Claude's proposal schema.
+// 'none' is the neutral default that every pre-F10 edge upgrades to.
+export type EdgeRelation = 'none' | 'supports' | 'refutes' | 'depends';
+export const EDGE_RELATIONS: EdgeRelation[] = ['none', 'supports', 'refutes', 'depends'];
+
 export interface MindEdge {
   id: string;
   source: string;
   target: string;
   label: string | null;
+  relation: EdgeRelation;
 }
 
 export interface GraphState {
@@ -49,6 +56,11 @@ export function createNode(label: string): MindNode {
   };
 }
 
-export function createEdge(source: string, target: string): MindEdge {
-  return { id: crypto.randomUUID(), source, target, label: null };
+export function createEdge(
+  source: string,
+  target: string,
+  label: string | null = null,
+  relation: EdgeRelation = 'none'
+): MindEdge {
+  return { id: crypto.randomUUID(), source, target, label, relation };
 }

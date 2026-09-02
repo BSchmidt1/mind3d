@@ -4,10 +4,11 @@ import SpriteText from 'three-spritetext';
 import type { GraphStore } from '../core/store';
 import type { Selection } from '../core/selection';
 import {
-  addEdge, addNode, composite, deleteNode, freezeAll, releaseAll, setLabel, setPosition
+  addEdge, addNode, composite, deleteEdge, deleteNode, freezeAll, releaseAll,
+  setEdgeLabel, setEdgeRelation, setLabel, setPosition
 } from '../core/commands';
-import { createEdge, createNode } from '../core/model';
-import type { GraphState } from '../core/model';
+import { createEdge, createNode, EDGE_RELATIONS } from '../core/model';
+import type { EdgeRelation, GraphState } from '../core/model';
 import { nHopNeighborhood } from '../core/neighborhood';
 import type { GraphDiff } from '../core/snapshot';
 import type { Vec3 } from '../core/viewpoint';
@@ -44,12 +45,29 @@ const GHOST_ACCENT = '#ffd54a';
 const DIFF_ADDED = '#5fd08a';
 const DIFF_CHANGED = '#ffd54a';
 const DIFF_REMOVED = '#e05a5a';
+// First-class edges (F10): link color by relation, and a bright highlight +
+// thicker line for the currently-selected edge.
+const RELATION_COLOR: Record<EdgeRelation, string> = {
+  none: '#5b6b80',
+  supports: '#5fd08a',
+  refutes: '#e05a5a',
+  depends: '#6fb3ff'
+};
+const EDGE_SELECTED_COLOR = '#ffd54a';
+const EDGE_SELECTED_WIDTH = 2;
 
 export class View3D {
   // 3d-force-graph has no useful public types; this is the documented `any` boundary.
   private graph: any;
   private simNodes: SimNode[] = [];
-  private simLinks: { id: string; source: string; target: string; ghost?: boolean }[] = [];
+  private simLinks: {
+    id: string;
+    source: string;
+    target: string;
+    ghost?: boolean;
+    label?: string | null;
+    relation?: EdgeRelation;
+  }[] = [];
   private ghost: GhostData | null = null;
   // Snapshot diff overlay (F8): per-id tints for present (added/changed)
   // nodes/edges. Removed nodes/edges are shown via the red-accented ghost.
@@ -57,6 +75,12 @@ export class View3D {
   private diffNodeColors: Map<string, string> | null = null;
   private diffLinkColors: Map<string, string> | null = null;
   private hoverNodeId: string | null = null;
+  private hoverLinkId: string | null = null;
+  // The floating edge editor (F10): a label <input> + a relation <select>,
+  // shown near a clicked edge's midpoint. `edgeEditorId` is the edge it edits,
+  // or null when hidden.
+  private edgeEditor!: HTMLDivElement;
+  private edgeEditorId: string | null = null;
   private linkMode = false;
   private focusMode = false;
   private focusSet: Set<string> | null = null;
@@ -82,11 +106,29 @@ export class View3D {
       .linkTarget('target')
       .linkDirectionalArrowLength(4)
       .linkDirectionalArrowRelPos(1)
+      // Edges render as thin lines; widen the ray-pick threshold so clicking an
+      // edge (F10 selection/editor) and hovering one is forgiving rather than
+      // pixel-perfect.
+      .linkHoverPrecision(6)
       .linkOpacity(0.35)
-      .linkColor((l: { id: string; ghost?: boolean }) => {
+      .linkColor((l: { id: string; ghost?: boolean; relation?: EdgeRelation }) => {
         if (l.ghost) return this.ghost?.accent ?? GHOST_ACCENT;
-        return this.diffLinkColors?.get(l.id) ?? '#5b6b80';
+        const diff = this.diffLinkColors?.get(l.id);
+        if (diff) return diff;
+        if (this.selection.getEdge() === l.id) return EDGE_SELECTED_COLOR;
+        return RELATION_COLOR[l.relation ?? 'none'];
       })
+      .linkWidth((l: { id: string }) => (this.selection.getEdge() === l.id ? EDGE_SELECTED_WIDTH : 0))
+      .linkLabel((l: { label?: string | null; relation?: EdgeRelation }) => {
+        const parts: string[] = [];
+        if (l.relation !== undefined && l.relation !== 'none') parts.push(l.relation);
+        if (l.label) parts.push(l.label);
+        return parts.join(': ');
+      })
+      .onLinkHover((l: { id: string } | null) => {
+        this.hoverLinkId = l ? l.id : null;
+      })
+      .onLinkClick((l: { id: string }) => this.handleLinkClick(l.id))
       .nodeThreeObject((n: SimNode) => this.makeSprite(n))
       .onNodeClick((n: SimNode) => this.handleNodeClick(n.id))
       .onNodeHover((n: SimNode | null) => {
@@ -100,7 +142,10 @@ export class View3D {
           this.suppressNextBgClick = false;
           return;
         }
-        if (!this.linkMode) this.selection.set(null);
+        if (!this.linkMode) {
+          this.selection.set(null);
+          this.selection.setEdge(null);
+        }
       });
 
     const resizeObserver = new ResizeObserver(() => {
@@ -130,15 +175,68 @@ export class View3D {
     this.labelInput.hidden = true;
     container.appendChild(this.labelInput);
 
+    this.buildEdgeEditor(container);
+
     this.store.subscribe((ev) => {
       if (ev.kind === 'structure') this.rebuild();
       else this.syncProps(ev.ids);
     });
     this.selection.subscribe(() => {
+      // Picking a node deselects any edge (mutual exclusivity) — close its
+      // editor. refresh() repaints both node sprites and link colors.
+      this.closeEdgeEditor();
       this.recomputeFocus();
       this.graph.refresh();
     });
+    this.selection.subscribeEdge((id) => {
+      if (id === null) this.closeEdgeEditor();
+      this.graph.refresh();
+    });
     this.rebuild();
+  }
+
+  // Build the floating edge editor once (a label input + a relation select).
+  // Handlers read `this.edgeEditorId` at event time and commit through the
+  // command store, so undo/redo covers edge edits like any other mutation.
+  private buildEdgeEditor(container: HTMLElement): void {
+    this.edgeEditor = document.createElement('div');
+    this.edgeEditor.id = 'edge-editor';
+    this.edgeEditor.hidden = true;
+    const label = document.createElement('input');
+    label.id = 'edge-editor-label';
+    label.placeholder = 'edge label';
+    const select = document.createElement('select');
+    select.id = 'edge-editor-relation';
+    for (const r of EDGE_RELATIONS) {
+      const opt = document.createElement('option');
+      opt.value = r;
+      opt.textContent = r;
+      select.appendChild(opt);
+    }
+    this.edgeEditor.append(label, select);
+    container.appendChild(this.edgeEditor);
+
+    label.addEventListener('change', () => {
+      if (this.edgeEditorId === null) return;
+      const v = label.value.trim();
+      this.store.apply(setEdgeLabel(this.edgeEditorId, v === '' ? null : v));
+    });
+    label.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        label.blur();
+        this.closeEdgeEditor();
+      }
+      if (ev.key === 'Escape') this.closeEdgeEditor();
+      ev.stopPropagation();
+    });
+    select.addEventListener('change', () => {
+      if (this.edgeEditorId === null) return;
+      this.store.apply(setEdgeRelation(this.edgeEditorId, select.value as EdgeRelation));
+    });
+    select.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') this.closeEdgeEditor();
+      ev.stopPropagation();
+    });
   }
 
   private makeSprite(n: SimNode): THREE.Object3D {
@@ -195,7 +293,9 @@ export class View3D {
     this.simLinks = [...this.store.state.edges.values()].map((e) => ({
       id: e.id,
       source: e.source,
-      target: e.target
+      target: e.target,
+      label: e.label,
+      relation: e.relation
     }));
     if (this.ghost) this.appendGhost(this.ghost);
     this.recomputeFocus();
@@ -336,6 +436,65 @@ export class View3D {
     this.selection.set(id);
   }
 
+  // Clicking an edge selects it (highlighting the link + clearing any node
+  // selection) and opens the inline label/relation editor near its midpoint.
+  private handleLinkClick(id: string): void {
+    if (this.linkMode) return; // link-creation mode owns clicks
+    this.selection.setEdge(id);
+    this.openEdgeEditor(id);
+  }
+
+  private openEdgeEditor(id: string, focus: 'label' | 'relation' = 'label'): void {
+    const e = this.store.state.edges.get(id);
+    if (!e) throw new Error(`openEdgeEditor: no such edge "${id}"`);
+    const src = this.simNodes.find((n) => n.id === e.source);
+    const tgt = this.simNodes.find((n) => n.id === e.target);
+    if (!src || !tgt) throw new Error(`openEdgeEditor: edge "${id}" endpoints not in simulation`);
+    const mx = ((src.x ?? 0) + (tgt.x ?? 0)) / 2;
+    const my = ((src.y ?? 0) + (tgt.y ?? 0)) / 2;
+    const mz = ((src.z ?? 0) + (tgt.z ?? 0)) / 2;
+    const coords = this.graph.graph2ScreenCoords(mx, my, mz);
+    this.edgeEditorId = id;
+    const labelInput = this.edgeEditor.querySelector<HTMLInputElement>('#edge-editor-label')!;
+    const relSelect = this.edgeEditor.querySelector<HTMLSelectElement>('#edge-editor-relation')!;
+    labelInput.value = e.label ?? '';
+    relSelect.value = e.relation;
+    this.edgeEditor.style.left = `${coords.x}px`;
+    this.edgeEditor.style.top = `${coords.y}px`;
+    this.edgeEditor.hidden = false;
+    if (focus === 'relation') {
+      relSelect.focus();
+    } else {
+      labelInput.focus();
+      labelInput.select();
+    }
+  }
+
+  private closeEdgeEditor(): void {
+    this.edgeEditor.hidden = true;
+    this.edgeEditorId = null;
+  }
+
+  // The edge under the cursor, or null (used by the context menu / palette in
+  // later tasks to target the hovered edge).
+  hoveredLink(): string | null {
+    return this.hoverLinkId;
+  }
+
+  // Select an edge and open its editor (palette / context-menu entry point).
+  editEdge(id: string, focus: 'label' | 'relation' = 'label'): void {
+    this.selection.setEdge(id);
+    this.openEdgeEditor(id, focus);
+  }
+
+  // Delete an edge by id, clearing its selection first (a stale edge selection
+  // is also reconciled centrally in main.ts, but clearing here keeps the
+  // highlight from flashing during the rebuild).
+  deleteEdgeById(id: string): void {
+    this.selection.setEdge(null);
+    this.store.apply(deleteEdge(id));
+  }
+
   private worldPointAt(clientX: number, clientY: number): { x: number; y: number; z: number } {
     const rect = this.container.getBoundingClientRect();
     const ndc = new THREE.Vector2(
@@ -397,12 +556,17 @@ export class View3D {
         this.linkMode = false;
         this.container.style.cursor = '';
         this.labelInput.hidden = true;
+        this.closeEdgeEditor();
+        this.selection.setEdge(null);
         break;
       case 'Delete':
       case 'Backspace':
         if (sel !== null) {
           this.selection.set(null);
           this.store.apply(deleteNode(sel));
+        } else {
+          const edgeSel = this.selection.getEdge();
+          if (edgeSel !== null) this.deleteEdgeById(edgeSel);
         }
         break;
       case 'e':

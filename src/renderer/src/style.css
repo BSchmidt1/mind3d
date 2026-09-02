@@ -14,6 +14,19 @@ body { margin: 0; background: #14181f; color: #dfe6ee; font: 13px/1.45 system-ui
 #view3d { position: relative; overflow: hidden; }
 #label-editor { position: absolute; z-index: 20; background: #10141a; color: #ffd54a; border: 1px solid #ffd54a; padding: 2px 6px; }
 
+/* Floating edge editor (F10): a label input + a relation select shown near a
+   clicked edge's midpoint, transform-centered on the point. */
+#edge-editor {
+  position: absolute; z-index: 20; transform: translate(-50%, -50%);
+  display: flex; gap: 4px; align-items: center;
+  background: #10141a; border: 1px solid #ffd54a; border-radius: 4px; padding: 3px 5px;
+}
+#edge-editor input, #edge-editor select {
+  background: #1b212b; color: #dfe6ee; border: 1px solid #3a4656; border-radius: 3px; padding: 2px 4px;
+}
+#edge-editor input { width: 130px; }
+#edge-editor[hidden] { display: none; }
+
 #empty-hint {
   position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
   color: #4d5c70; font-size: 13px; text-align: center; pointer-events: none; white-space: nowrap;

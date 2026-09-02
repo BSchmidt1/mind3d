@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { createEdge, createNode, emptyState } from '../src/renderer/src/core/model';
 import {
   addEdge, addNode, composite, deleteEdge, deleteNode, freezeAll,
-  releaseAll, reparent, setLabel, setPosition
+  releaseAll, reparent, setEdgeLabel, setEdgeRelation, setLabel, setPosition
 } from '../src/renderer/src/core/commands';
 import { GraphStore, type ChangeEvent } from '../src/renderer/src/core/store';
 
@@ -140,6 +140,39 @@ describe('GraphStore', () => {
     }).toThrow();
     expect(store.state.nodes.has(n.id)).toBe(false);
     expect(store.canUndo).toBe(initialCanUndo);
+  });
+
+  test('setEdgeLabel sets/undoes/redoes and emits a structure event', () => {
+    const { store, ids } = storeWith(['a', 'b']);
+    const e = createEdge(ids[0]!, ids[1]!);
+    store.apply(addEdge(e));
+    const events: ChangeEvent[] = [];
+    store.subscribe((ev) => events.push(ev));
+    store.apply(setEdgeLabel(e.id, 'supports argument'));
+    expect(store.state.edges.get(e.id)!.label).toBe('supports argument');
+    expect(events[0]!.kind).toBe('structure'); // forces link rebuild/repaint
+    expect(store.undo()).toBe(true);
+    expect(store.state.edges.get(e.id)!.label).toBeNull();
+    expect(store.redo()).toBe(true);
+    expect(store.state.edges.get(e.id)!.label).toBe('supports argument');
+  });
+
+  test('setEdgeLabel on missing edge throws', () => {
+    const store = new GraphStore();
+    expect(() => store.apply(setEdgeLabel('nope', 'x'))).toThrow(/no such edge: "nope"/);
+  });
+
+  test('setEdgeRelation sets/undoes/redoes; default relation is none', () => {
+    const { store, ids } = storeWith(['a', 'b']);
+    const e = createEdge(ids[0]!, ids[1]!);
+    store.apply(addEdge(e));
+    expect(store.state.edges.get(e.id)!.relation).toBe('none');
+    store.apply(setEdgeRelation(e.id, 'refutes'));
+    expect(store.state.edges.get(e.id)!.relation).toBe('refutes');
+    expect(store.undo()).toBe(true);
+    expect(store.state.edges.get(e.id)!.relation).toBe('none');
+    expect(store.redo()).toBe(true);
+    expect(store.state.edges.get(e.id)!.relation).toBe('refutes');
   });
 
   test('deleteEdge undo restores edge order', () => {

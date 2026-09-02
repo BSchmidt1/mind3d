@@ -1,4 +1,5 @@
-import { createEdge, createNode } from './model';
+import { createEdge, createNode, EDGE_RELATIONS } from './model';
+import type { EdgeRelation } from './model';
 import { addEdge, addNode, composite } from './commands';
 import type { Command } from './commands';
 
@@ -19,6 +20,7 @@ export interface ProposalEdgeOp {
   from: string;
   to: string;
   label?: string;
+  relation?: EdgeRelation;
 }
 
 export type ProposalOp = ProposalNodeOp | ProposalEdgeOp;
@@ -31,13 +33,15 @@ export interface ProposalOpSet {
 
 // The canonical proposal JSON schema example. Embedded verbatim in every
 // prompt that asks Claude for an op-set (voice F6, ask F4, import F5) so all
-// callers agree on the exact shape `parseProposal` accepts. `answer` and edge
-// `label` are optional — voice simply never fills them.
+// callers agree on the exact shape `parseProposal` accepts. `answer`, edge
+// `label`, and edge `relation` are optional — voice simply never fills them.
+// `relation` (F10) types an edge as one of none/supports/refutes/depends.
 export const PROPOSAL_SCHEMA = `{ "ops": [
     {"op":"node","tmp":"n1","label":"Funding strategy","notes":"optional markdown detail"},
     {"op":"node","tmp":"n2","label":"Grants","parent":"n1"},
-    {"op":"edge","from":"n1","to":"<existing-node-id>","label":"optional edge label"}
-  ], "summary":"one sentence", "answer":"optional short text reply" }`;
+    {"op":"edge","from":"n1","to":"<existing-node-id>","label":"optional edge label","relation":"supports"}
+  ], "summary":"one sentence", "answer":"optional short text reply" }
+Edge "relation" is optional and must be one of: none, supports, refutes, depends (default none). Use "supports"/"refutes" for argumentative links and "depends" for prerequisites.`;
 
 export interface Proposal {
   opSet: ProposalOpSet;
@@ -87,7 +91,7 @@ function validateNodeOp(o: Record<string, unknown>, i: number): ProposalNodeOp {
 }
 
 function validateEdgeOp(o: Record<string, unknown>, i: number): ProposalEdgeOp {
-  const allowed = new Set(['op', 'from', 'to', 'label']);
+  const allowed = new Set(['op', 'from', 'to', 'label', 'relation']);
   for (const k of Object.keys(o)) {
     if (!allowed.has(k)) throw new Error(`proposal: op[${i}] has unknown field "${k}"`);
   }
@@ -100,8 +104,15 @@ function validateEdgeOp(o: Record<string, unknown>, i: number): ProposalEdgeOp {
   if (o.label !== undefined && typeof o.label !== 'string') {
     throw new Error(`proposal: op[${i}] (edge) "label" must be a string`);
   }
+  if (o.relation !== undefined &&
+      (typeof o.relation !== 'string' || !(EDGE_RELATIONS as string[]).includes(o.relation))) {
+    throw new Error(
+      `proposal: op[${i}] (edge) "relation" must be one of ${EDGE_RELATIONS.join(', ')}`
+    );
+  }
   const edge: ProposalEdgeOp = { op: 'edge', from: o.from, to: o.to };
   if (o.label !== undefined) edge.label = o.label as string;
+  if (o.relation !== undefined) edge.relation = o.relation as EdgeRelation;
   return edge;
 }
 
@@ -213,18 +224,16 @@ export function planProposal(
     const from = resolve(op.from);
     const to = resolve(op.to);
     if (from === to) throw new Error(`proposal: self-loop on "${from}"`);
-    const edge = createEdge(from, to);
-    edge.label = op.label ?? null;
+    const edge = createEdge(from, to, op.label ?? null, op.relation ?? 'none');
     addEdgeCmds.push(addEdge(edge));
     newEdges.push({ id: edge.id, source: edge.source, target: edge.target });
     edgeTargets.add(to);
     const fromLabel = resolveLabel(op.from);
     const toLabel = resolveLabel(op.to);
-    humanOps.push(
-      op.label !== undefined
-        ? `+ edge "${fromLabel}" → "${toLabel}" "${op.label}"`
-        : `+ edge "${fromLabel}" → "${toLabel}"`
-    );
+    let line = `+ edge "${fromLabel}" → "${toLabel}"`;
+    if (op.label !== undefined) line += ` "${op.label}"`;
+    if (op.relation !== undefined && op.relation !== 'none') line += ` [${op.relation}]`;
+    humanOps.push(line);
   }
 
   let rootId: string | null = null;

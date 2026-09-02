@@ -28,6 +28,10 @@ store.subscribe((ev) => {
   if (ev.kind !== 'structure') return;
   const sel = selection.get();
   if (sel !== null && !store.state.nodes.has(sel)) selection.set(null);
+  // Same reconciliation for a selected EDGE (F10): a delete/undo/redo — or a
+  // node deletion that cascades incident edges — can remove the selected edge.
+  const edgeSel = selection.getEdge();
+  if (edgeSel !== null && !store.state.edges.has(edgeSel)) selection.setEdge(null);
 });
 
 document.body.innerHTML = `
@@ -273,6 +277,31 @@ registry.register({
   when: () => selection.get() !== null
 });
 
+// --- first-class edges (F10) ---
+// The selected edge, else the hovered one — so an edge command works whether
+// the edge is clicked (selected) or just under the cursor.
+function edgeTarget(): string | null {
+  return selection.getEdge() ?? view3d.hoveredLink();
+}
+registry.register({
+  id: 'edge-set-label',
+  title: 'Edit edge label',
+  run: () => { const id = edgeTarget(); if (id !== null) view3d.editEdge(id, 'label'); },
+  when: () => edgeTarget() !== null
+});
+registry.register({
+  id: 'edge-set-relation',
+  title: 'Set edge relation',
+  run: () => { const id = edgeTarget(); if (id !== null) view3d.editEdge(id, 'relation'); },
+  when: () => edgeTarget() !== null
+});
+registry.register({
+  id: 'edge-delete',
+  title: 'Delete edge',
+  run: () => { const id = edgeTarget(); if (id !== null) view3d.deleteEdgeById(id); },
+  when: () => edgeTarget() !== null
+});
+
 function updateCounts(): void {
   const s = store.state;
   statusCountsEl.textContent = `${s.nodes.size} nodes · ${s.edges.size} edges · ${view3d.pinnedCount()} pinned`;
@@ -291,6 +320,7 @@ dblclick empty   new node          Tab        add child
 click            select            l          link mode (Esc cancels)
 drag / arrows    move + pin        Shift+↑/↓  move in depth
 p                pin/unpin         e          edit label
+click edge       edit label/relation          Delete removes selected edge
 Delete           delete node       f          fly to selection
 x                focus mode        Ctrl+Z/Shift+Z  undo/redo
 Ctrl+S/O         save/open         ?          this help

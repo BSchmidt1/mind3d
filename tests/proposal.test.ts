@@ -86,6 +86,18 @@ describe('parseProposal', () => {
     const text = '{"ops":[{"op":"edge","from":"a","to":"b","label":1}],"summary":"x"}';
     expect(() => parseProposal(text)).toThrow(/op\[0\]/);
   });
+
+  // F10: edge `relation` is optional and must be one of EDGE_RELATIONS.
+  test('edge op with a valid relation parses ok', () => {
+    const text = '{"ops":[{"op":"edge","from":"a","to":"b","relation":"refutes"}],"summary":"x"}';
+    const op = parseProposal(text).ops[0]!;
+    expect(op.op === 'edge' && op.relation).toBe('refutes');
+  });
+
+  test('edge op with an invalid relation throws naming index', () => {
+    const text = '{"ops":[{"op":"edge","from":"a","to":"b","relation":"maybe"}],"summary":"x"}';
+    expect(() => parseProposal(text)).toThrow(/op\[0\]/);
+  });
 });
 
 describe('planProposal', () => {
@@ -301,6 +313,40 @@ describe('planProposal', () => {
       source: plan.newNodeIds[1],
       target: plan.newNodeIds[0]
     });
+  });
+
+  // F10: a proposal edge relation flows onto the created edge and into humanOps.
+  test('edge relation lands on the created edge and appears in humanOps', () => {
+    const store = new GraphStore();
+    const opSet: ProposalOpSet = {
+      ops: [
+        { op: 'node', tmp: 'n1', label: 'A' },
+        { op: 'node', tmp: 'n2', label: 'B' },
+        { op: 'edge', from: 'n1', to: 'n2', label: 'backs', relation: 'supports' }
+      ],
+      summary: 'x'
+    };
+    const plan = planProposal(opSet, new Set(), labelOfNone);
+    store.apply(plan.command);
+    const edge = [...store.state.edges.values()][0]!;
+    expect(edge.relation).toBe('supports');
+    expect(edge.label).toBe('backs');
+    expect(plan.humanOps.some((l) => l.includes('supports'))).toBe(true);
+  });
+
+  test('edge without relation defaults to none on the created edge', () => {
+    const store = new GraphStore();
+    const opSet: ProposalOpSet = {
+      ops: [
+        { op: 'node', tmp: 'n1', label: 'A' },
+        { op: 'node', tmp: 'n2', label: 'B' },
+        { op: 'edge', from: 'n1', to: 'n2' }
+      ],
+      summary: 'x'
+    };
+    const plan = planProposal(opSet, new Set(), labelOfNone);
+    store.apply(plan.command);
+    expect([...store.state.edges.values()][0]!.relation).toBe('none');
   });
 
   test('opSet is carried through unchanged on the Proposal', () => {

@@ -52,10 +52,10 @@ function nodeTuple(n: MindNode): string {
   return JSON.stringify([n.label, n.notes, n.color, n.tags, n.fx, n.fy, n.fz, n.attachedFile]);
 }
 
-// Compared edge fields. A normalized tuple (endpoints + label) so F10's
-// `relation` slots in here defensively once the field exists.
+// Compared edge fields: endpoints + label + relation (F10). A relation change
+// alone counts as an edge change for diff purposes.
 function edgeTuple(e: MindEdge): string {
-  return JSON.stringify([e.source, e.target, e.label]);
+  return JSON.stringify([e.source, e.target, e.label, e.relation]);
 }
 
 // Diff two graph states by id: added = in `after` only, removed = in `before`

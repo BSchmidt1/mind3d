@@ -1,5 +1,5 @@
-import type { GraphState, MindEdge, MindNode } from './model';
-import { emptyState } from './model';
+import type { EdgeRelation, GraphState, MindEdge, MindNode } from './model';
+import { emptyState, EDGE_RELATIONS } from './model';
 import type { Snapshot } from './snapshot';
 import type { Tour, TourStop, Vec3, Viewpoint } from './viewpoint';
 
@@ -78,7 +78,12 @@ const NODE_KEYS = new Set([
   'id', 'label', 'notes', 'color', 'tags', 'fx', 'fy', 'fz',
   'attachedFile', 'claudePrompt', 'claudeResult'
 ]);
-const EDGE_KEYS = new Set(['id', 'source', 'target', 'label']);
+// Edges: required keys + an OPTIONAL `relation` (F10). A pre-F10 edge has no
+// `relation` key and defaults to 'none' on load; a present value must be one of
+// EDGE_RELATIONS (fail-fast otherwise). Backward-compatible within v2 — no
+// numeric version bump.
+const EDGE_REQUIRED = new Set(['id', 'source', 'target', 'label']);
+const EDGE_OPTIONAL = new Set(['relation']);
 const META_KEYS = new Set(['name', 'createdAt', 'modifiedAt']);
 // The v2 top level: required keys always present; optional keys default when
 // absent. Later tasks push into TOP_OPTIONAL (F9 viewpoints/tours, F12 mode).
@@ -127,17 +132,38 @@ function parseNode(v: unknown, ctx: string): MindNode {
   };
 }
 
+function parseRelation(v: unknown, ctx: string): EdgeRelation {
+  if (v === undefined) return 'none';
+  if (typeof v !== 'string' || !(EDGE_RELATIONS as string[]).includes(v)) {
+    throw new Error(`${ctx}: relation "${String(v)}" is not one of ${EDGE_RELATIONS.join(', ')}`);
+  }
+  return v as EdgeRelation;
+}
+
 function parseEdge(v: unknown, ctx: string, nodeIds: Set<string>): MindEdge {
   if (!isObj(v)) throw new Error(`${ctx}: expected object`);
   const id = str(v['id'], `${ctx}.id`);
   const c = `${ctx} (id="${id}")`;
-  checkKeys(v, EDGE_KEYS, c);
+  // Required keys must all be present; optional keys (relation) may be absent;
+  // any other key is rejected.
+  for (const k of Object.keys(v)) {
+    if (!EDGE_REQUIRED.has(k) && !EDGE_OPTIONAL.has(k)) throw new Error(`${c}: unknown field "${k}"`);
+  }
+  for (const k of EDGE_REQUIRED) {
+    if (!(k in v)) throw new Error(`${c}: missing field "${k}"`);
+  }
   const source = str(v['source'], `${c}.source`);
   const target = str(v['target'], `${c}.target`);
   if (!nodeIds.has(source)) throw new Error(`${c}: source references missing node "${source}"`);
   if (!nodeIds.has(target)) throw new Error(`${c}: target references missing node "${target}"`);
   if (source === target) throw new Error(`${c}: self-loop not allowed`);
-  return { id, source, target, label: strOrNull(v['label'], `${c}.label`) };
+  return {
+    id,
+    source,
+    target,
+    label: strOrNull(v['label'], `${c}.label`),
+    relation: parseRelation(v['relation'], c)
+  };
 }
 
 // A snapshot's edges reference the snapshot's OWN nodes, so validate them

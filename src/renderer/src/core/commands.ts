@@ -1,4 +1,4 @@
-import type { GraphState, MindEdge, MindNode, ClaudeResult } from './model';
+import type { EdgeRelation, GraphState, MindEdge, MindNode, ClaudeResult } from './model';
 
 export type ChangeKind = 'structure' | 'props';
 
@@ -138,6 +138,44 @@ function propCommand<T>(
       set(reqNode(s, id), prev as T);
     }
   };
+}
+
+// Edge-prop commands (F10). Same capture-prev-for-undo shape as propCommand,
+// but operating on an edge (via reqEdge). kind is 'structure' so View3D
+// rebuilds its link array — link color/label are read from the store edges in
+// rebuild(), so a repaint requires the full structure path, not a props sync.
+function edgePropCommand<T>(
+  name: string,
+  id: string,
+  get: (e: MindEdge) => T,
+  set: (e: MindEdge, v: T) => void,
+  value: T
+): Command {
+  let prev: T | undefined;
+  let hadPrev = false;
+  return {
+    name,
+    kind: 'structure',
+    ids: [id],
+    execute(s) {
+      const e = reqEdge(s, id);
+      prev = get(e);
+      hadPrev = true;
+      set(e, value);
+    },
+    undo(s) {
+      if (!hadPrev) throw new Error(`undo before execute: ${name}`);
+      set(reqEdge(s, id), prev as T);
+    }
+  };
+}
+
+export function setEdgeLabel(id: string, label: string | null): Command {
+  return edgePropCommand('setEdgeLabel', id, (e) => e.label, (e, v) => { e.label = v; }, label);
+}
+
+export function setEdgeRelation(id: string, relation: EdgeRelation): Command {
+  return edgePropCommand('setEdgeRelation', id, (e) => e.relation, (e, v) => { e.relation = v; }, relation);
 }
 
 export function setLabel(id: string, label: string): Command {

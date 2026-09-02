@@ -158,6 +158,35 @@ describe('serialize', () => {
     expect(() => deserializeGraph(JSON.stringify(doc))).toThrow(/snapshots\[0\].*bogus/s);
   });
 
+  test('a v2 edge without a relation field loads as "none" (backward-compat)', () => {
+    // An F8/F9-era v2 edge — or any file written before F10 — has no `relation`
+    // key. It must still load, defaulting relation to 'none'.
+    const doc = JSON.parse(serializeGraph(sampleState(), meta));
+    for (const e of doc.edges) delete e.relation;
+    const out = deserializeGraph(JSON.stringify(doc));
+    for (const e of out.state.edges.values()) expect(e.relation).toBe('none');
+  });
+
+  test('round-trips a set edge relation', () => {
+    const s = emptyState();
+    const a = createNode('a');
+    const b = createNode('b');
+    s.nodes.set(a.id, a);
+    s.nodes.set(b.id, b);
+    const e = createEdge(a.id, b.id, 'backs', 'supports');
+    s.edges.set(e.id, e);
+    const out = deserializeGraph(serializeGraph(s, meta));
+    const round = [...out.state.edges.values()][0]!;
+    expect(round.label).toBe('backs');
+    expect(round.relation).toBe('supports');
+  });
+
+  test('rejects an invalid edge relation, naming the edge (fail-fast)', () => {
+    const doc = JSON.parse(serializeGraph(sampleState(), meta));
+    doc.edges[0].relation = 'nonsense';
+    expect(() => deserializeGraph(JSON.stringify(doc))).toThrow(/relation.*nonsense/s);
+  });
+
   test('rejects unknown node field, naming node and field', () => {
     const doc = JSON.parse(serializeGraph(sampleState(), meta));
     doc.nodes[0].bogus = 1;
