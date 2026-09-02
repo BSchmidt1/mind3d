@@ -34,7 +34,10 @@ build` when you touch main/preload or anything that could break bundling.
    `composite(name, cmds)` (it rolls back atomically if a sub-command throws).
 3. **Fail fast.** Validate inputs and `throw new Error` with a message naming the
    offending field/id. Never silently default, drop, or sentinel-fill. Errors
-   surface to the user via the status bar; they must not be swallowed.
+   surface to the user as an error **toast** (`notify.error`, see `ui/notify.ts`);
+   they must not be swallowed. (The one intentional default is the backward-compat
+   format upgrade in `serialize.ts`: an *absent* optional section becomes its
+   documented default — a present-but-malformed value still throws.)
 4. **No secrets, ever.** `claude -p` inherits the machine's Claude Code login;
    `nerd-dictation` is fully offline. Child processes get `process.env`
    pass-through only. No API key or token goes into code, config, or git history.
@@ -56,10 +59,15 @@ Three layers, thin at the edges:
   - `index.ts` — window + app lifecycle + the quit/close save handshake; registers
     every IPC module.
   - `persistence.ts` — open/save dialogs, atomic write + `.bak.1..5` rotation,
-    the `recovery.json` writer, and `open-external` (scheme-allowlisted).
+    the `recovery.json` writer, `open-external` (scheme-allowlisted), and
+    `url-fetch` (F5 import; `http`/`https` only).
   - `claudeRunner.ts` — the per-node streaming `claude -p` runner.
-  - `voiceRunner.ts` — `nerd-dictation` push-to-talk + the one-shot `voice-claude`
-    handler.
+  - `claudeOneshot.ts` — the shared one-shot `claude -p` handler (channel
+    `'claude-oneshot'`, spawned with `--tools ""`). Used by Ask (F4), Import
+    (F5), and Voice (F6) for text→JSON extraction. (This moved out of
+    `voiceRunner.ts`, where the old `voice-claude` handler used to live.)
+  - `voiceRunner.ts` — `nerd-dictation` push-to-talk only (`voice-begin` /
+    `voice-end`); the one-shot spawn now lives in `claudeOneshot.ts`.
 - **`src/preload/index.ts`** — the `window.mind3d` bridge. Every renderer→OS call
   and every OS→renderer event is declared here and in `src/shared/ipc.ts`. `on*`
   subscription wrappers use `removeAllListeners`-before-`on` (single-subscriber,
@@ -68,16 +76,32 @@ Three layers, thin at the edges:
   one contract both processes share.
 - **`src/renderer/`** — everything else, vanilla TS + DOM, no UI framework.
   - `core/` — pure, unit-tested logic: `model.ts` (types + `createNode`/
-    `createEdge`), `commands.ts` (the command factories), `store.ts`
-    (`GraphStore`: apply/undo/redo + change events), `serialize.ts` (versioned
-    JSON + strict validation), `outline.ts` (graph→spanning-tree projection with
-    mirror rows), `neighborhood.ts` (n-hop BFS for focus mode), `fuzzy.ts`
-    (search scoring), `selection.ts`, `voiceOps.ts` + `voicePrompt.ts` (voice:
-    parse+validate Claude's JSON → commands, and build the prompt).
+    `createEdge`; the `EdgeRelation` enum lives here), `commands.ts` (the command
+    factories, incl. `setEdgeLabel`/`setEdgeRelation`), `store.ts` (`GraphStore`:
+    apply/undo/redo + change events — `ChangeEvent` now also carries `name` +
+    `source`), `serialize.ts` (versioned JSON + strict validation; the v2
+    optional-section loader), `outline.ts` (graph→spanning-tree projection with
+    mirror rows), `neighborhood.ts` (n-hop BFS for focus mode + ask context),
+    `fuzzy.ts` (fuzzy scoring), `search.ts` (fuzzy over labels **and** notes),
+    `selection.ts`, `voiceOps.ts` + `voicePrompt.ts` (voice glue + prompt). New in
+    v2: `proposal.ts` (the shared Claude proposal engine — `parseProposal`/
+    `planProposal`, used by voice/ask/import), `toasts.ts` (`ToastStore`),
+    `commandRegistry.ts` (the Ctrl+K registry), `snapshot.ts` (checkpoints +
+    `diffStates`), `viewpoint.ts` (camera viewpoints + tours), `tags.ts`
+    (tag index + `tagColor`), `askContext.ts`/`askPrompts.ts` (graph→context +
+    ask prompt library), `importPrompt.ts` (import extraction prompt).
   - `ui/` — `view3d.ts` (the 3D view + all its interactions), `outlinePanel.ts`,
-    `detailPanel.ts`, `claudeSection.ts`, `voicePanel.ts`.
-  - `main.ts` — wires the top bar, panels, keyboard shortcuts, map session, and
-    the cross-surface glue (search, undo/redo, selection reconciliation).
+    `detailPanel.ts`, `claudeSection.ts`, `voicePanel.ts`. New in v2: `notify.ts`
+    (the `notify` singleton + toast host), `commandPalette.ts` (Ctrl+K overlay),
+    `proposalPanel.ts` (the accept/reject ghost preview), `askController.ts`
+    (F4), `importController.ts` (F5), `snapshotController.ts` (F8),
+    `tourController.ts` (F9), `tagBar.ts` (F11), `contextMenu.ts` (F13), and
+    `modal.ts` (`confirmModal` + the single-modal coordinator). Renderer glue for
+    the one-shot spawn is `src/renderer/src/askClaude.ts` (`askClaudeForOps`).
+  - `main.ts` — wires the top bar, panels, keyboard shortcuts, map session, the
+    command registry + palette, and the cross-surface glue (search, undo/redo,
+    selection reconciliation). Feature installers (`installAsk`/`installImport`/
+    `installSnapshots`/`installTours`, `ContextMenu`, `TagBar`) are called here.
   - `mapSession.ts` — new/open/save/autosave/quit-save state.
 
 Data flow: a UI surface builds a `Command` and calls `store.apply(cmd)`. The store
@@ -138,6 +162,44 @@ voice/claude round-trips are verified by a human/interactive pass.
   physically open" (`listening`) from "the whole listen→think→apply cycle is
   running" (`inFlight`). `end()`/`onVoiceError` guard on `listening`; a mid-cycle
   press must not free `inFlight`. `inFlight` clears in a `finally`.
+- **The file format is v2 with OPTIONAL top-level sections.** `serialize.ts`
+  splits the top level into required `{version, meta, nodes, edges}` and an
+  optional set (`snapshots`, `viewpoints`, `tours`, `mode`) plus an optional edge
+  `relation` field. An *absent* optional section loads as its documented default
+  (`[]`, `[]`, `[]`, `'3d'`, `'none'`); a *present-but-malformed* value still
+  throws, and unknown keys throw. Extend the format via the same
+  optional-with-default pattern — **do NOT bump the numeric version** (it stays
+  `2`); a v1 file upgrades in memory, and older-v2 files (missing a later section)
+  must keep loading. Every extension needs a test proving a file lacking that
+  section still loads.
+- **One shared `ghost` slot in `View3D`.** The F3b proposal preview and the F8
+  snapshot diff both render through the single `this.ghost` field (translucent
+  gold nodes for a proposal; red-accented removed nodes for a diff). They never
+  co-occur — a new proposal/diff clears the prior ghost first. Don't add a second
+  ghost mechanism; reuse `showGhost`/`clearGhost`/`showDiff`/`clearDiff`.
+- **The shared proposal engine (`core/proposal.ts`) feeds voice, ask, and
+  import.** `parseProposal`/`planProposal` carry the voice algorithm verbatim;
+  `voiceOps.ts` is now a thin delegating wrapper (keeps `tests/voiceOps.test.ts`
+  green). If you touch `proposal.ts`, voice **and** ask **and** import must keep
+  working — preserve its error substrings (`op[i]`, `valid JSON`, `summary`,
+  `unknown id`, `duplicate`, `self-loop`, `nothing to create`).
+- **`claude-oneshot` runs with `--tools ""`.** All built-in tools are disabled
+  for the shared one-shot spawn — defense-in-depth against prompt-injection from
+  imported web/file content (F5), which routes third-party text into the prompt.
+  Extraction is unaffected; keep the flag.
+- **`3d-force-graph` 1.80 uses TRACKBALL controls, not orbit.** The rotation flag
+  is `controls().noRotate` (set `true` for 2D mode), not `enableRotate` — 2D mode
+  sets `noRotate` (and `enableRotate` defensively). Don't assume OrbitControls.
+- **Body-mounted overlays register with the single-modal coordinator**
+  (`ui/modal.ts`: `registerModal(id, close)` once, `closeOtherModals(id)` at the
+  top of each open path) so opening any one closes the others. Every overlay (Ask
+  input, Import modal, voice confirm, snapshot/viewpoint/tour pickers, the command
+  palette, `confirmModal`) participates — a new body-level overlay should too, or
+  it can overlap the rest. Duplicate ids throw (fail-fast).
+- **`refresh()`'s O(n) sprite regen now also fires from the tag bar.** In addition
+  to selection recolour, `TagBar`'s dim-filter and color-by-tag call
+  `view3d.setDimFilter`/`setColorByTag`, each of which does a `graph.refresh()`
+  (regenerating every label sprite). Same O(n) cost to watch at large node counts.
 
 ## How this repo was built
 
