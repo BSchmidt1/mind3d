@@ -6,6 +6,7 @@ import { OutlinePanel } from './ui/outlinePanel';
 import { DetailPanel } from './ui/detailPanel';
 import { MapSession } from './mapSession';
 import { VoicePanel } from './ui/voicePanel';
+import { initNotify, notify } from './ui/notify';
 
 export const store = new GraphStore();
 export const selection = new Selection();
@@ -29,26 +30,46 @@ document.body.innerHTML = `
     <button id="btn-voice" title="hold to speak">🎤</button>
     <input id="search" placeholder="search… (fly-to)" />
     <div id="search-results" hidden></div>
-    <span id="status"></span>
+    <span id="status-counts"></span>
   </div>
   <div id="layout">
     <div id="outline-panel"></div>
     <div id="view3d"></div>
     <div id="detail-panel"></div>
   </div>
+  <div id="toast-host"></div>
 `;
 
-const statusEl = document.getElementById('status')!;
+initNotify(document.getElementById('toast-host')!);
+
+// Thin shim kept for any caller still holding a `(msg: string) => void`
+// status callback; new code should call `notify` directly.
 export function setStatus(msg: string): void {
-  statusEl.textContent = msg;
+  notify.info(msg);
 }
+
+const statusCountsEl = document.getElementById('status-counts')!;
 
 export const view3d = new View3D(
   document.getElementById('view3d')!,
   store,
   selection,
-  setStatus
+  (m) => notify.info(m)
 );
+
+// --- empty-state onboarding hint ---
+// Appended *after* View3D takes over #view3d: 3d-force-graph clears the
+// container's existing children when it mounts, so an element placed there
+// in the initial template would be wiped out before this ever ran.
+const emptyHintEl = document.createElement('div');
+emptyHintEl.id = 'empty-hint';
+emptyHintEl.textContent = 'double-click to add · hold 🎤 to speak · Ctrl+K for commands · ? for shortcuts';
+document.getElementById('view3d')!.appendChild(emptyHintEl);
+function refreshEmptyHint(): void {
+  emptyHintEl.hidden = store.state.nodes.size > 0;
+}
+store.subscribe(refreshEmptyHint);
+refreshEmptyHint();
 
 // --- search ---
 const searchEl = document.getElementById('search') as HTMLInputElement;
@@ -102,14 +123,14 @@ new OutlinePanel(document.getElementById('outline-panel')!, store, selection);
 // --- map session (new/open/save/autosave/quit-save) ---
 const fileStateEl = document.createElement('span');
 fileStateEl.id = 'file-state';
-document.getElementById('topbar')!.insertBefore(fileStateEl, statusEl);
+document.getElementById('topbar')!.insertBefore(fileStateEl, statusCountsEl);
 
 export const session = new MapSession(store, (label) => {
   fileStateEl.textContent = label;
 });
 
 // --- voice mode (push-to-talk) ---
-const voicePanel = new VoicePanel(store, selection, view3d, session, setStatus);
+const voicePanel = new VoicePanel(store, selection, view3d, session, (m) => notify.info(m));
 const voiceBtn = document.getElementById('btn-voice')!;
 function stopVoiceListening(): void {
   voicePanel.end();
@@ -126,14 +147,15 @@ function guard(fn: () => void | Promise<void>): void {
     try {
       await fn();
     } catch (err) {
-      setStatus(`ERROR: ${(err as Error).message}`);
+      notify.error(`ERROR: ${(err as Error).message}`);
     }
   })();
 }
 
 document.getElementById('btn-new')!.addEventListener('click', () =>
   guard(() => {
-    setStatus(session.newMap() ? 'new map' : 'kept current map');
+    if (session.newMap()) notify.success('new map');
+    else notify.info('kept current map');
   })
 );
 document.getElementById('btn-open')!.addEventListener('click', () => guard(() => session.open()));
@@ -161,18 +183,20 @@ releaseBtn.textContent = 'Release all';
 document.getElementById('topbar')!.insertBefore(freezeBtn, fileStateEl);
 document.getElementById('topbar')!.insertBefore(releaseBtn, fileStateEl);
 freezeBtn.addEventListener('click', () => guard(() => {
-  if (store.state.nodes.size === 0) { setStatus('map is empty'); return; }
-  if (view3d.pinnedCount() === store.state.nodes.size) { setStatus('all nodes already pinned'); return; }
+  if (store.state.nodes.size === 0) { notify.info('map is empty'); return; }
+  if (view3d.pinnedCount() === store.state.nodes.size) { notify.info('all nodes already pinned'); return; }
   view3d.freezeAllNow();
+  notify.success('froze all nodes');
 }));
 releaseBtn.addEventListener('click', () => guard(() => {
-  if (view3d.pinnedCount() === 0) { setStatus('no pinned nodes'); return; }
+  if (view3d.pinnedCount() === 0) { notify.info('no pinned nodes'); return; }
   view3d.releaseAllNow();
+  notify.success('released all nodes');
 }));
 
 function updateCounts(): void {
   const s = store.state;
-  setStatus(`${s.nodes.size} nodes · ${s.edges.size} edges · ${view3d.pinnedCount()} pinned`);
+  statusCountsEl.textContent = `${s.nodes.size} nodes · ${s.edges.size} edges · ${view3d.pinnedCount()} pinned`;
 }
 store.subscribe(updateCounts);
 updateCounts();

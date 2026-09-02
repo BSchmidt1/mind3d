@@ -7,11 +7,33 @@ body { margin: 0; background: #14181f; color: #dfe6ee; font: 13px/1.45 system-ui
 #search-results { position: absolute; top: 34px; left: 210px; z-index: 10; background: #1b212b; border: 1px solid #3a4656; min-width: 220px; }
 .search-row { padding: 4px 8px; cursor: pointer; }
 .search-row:hover { background: #2a3340; }
-#status { margin-left: auto; color: #8fa1b8; }
+#status-counts { margin-left: auto; color: #8fa1b8; }
 #layout { display: grid; grid-template-columns: 280px 1fr 320px; height: calc(100vh - 37px); }
 #outline-panel, #detail-panel { background: #181d26; overflow-y: auto; padding: 8px; }
 #view3d { position: relative; overflow: hidden; }
 #label-editor { position: absolute; z-index: 20; background: #10141a; color: #ffd54a; border: 1px solid #ffd54a; padding: 2px 6px; }
+
+#empty-hint {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  color: #4d5c70; font-size: 13px; text-align: center; pointer-events: none; white-space: nowrap;
+}
+#empty-hint[hidden] { display: none; }
+
+#toast-host {
+  position: fixed; bottom: 16px; right: 16px; z-index: 200;
+  display: flex; flex-direction: column-reverse; gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto; cursor: pointer; max-width: 320px;
+  background: #1b212b; border: 1px solid #3a4656; border-left: 3px solid #6fb3ff;
+  border-radius: 4px; padding: 8px 12px; box-shadow: 0 4px 20px #000a;
+  animation: toast-in 0.15s ease-out;
+}
+.toast-info { border-left-color: #6fb3ff; }
+.toast-success { border-left-color: #5fd08a; }
+.toast-error { border-left-color: #e05a5a; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
 .outline-head { color: #8fa1b8; margin-bottom: 6px; }
 .outline-row { cursor: pointer; padding: 2px 4px; border-radius: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
