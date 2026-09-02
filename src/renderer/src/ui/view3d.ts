@@ -7,7 +7,9 @@ import {
   addEdge, addNode, composite, deleteNode, freezeAll, releaseAll, setLabel, setPosition
 } from '../core/commands';
 import { createEdge, createNode } from '../core/model';
+import type { GraphState } from '../core/model';
 import { nHopNeighborhood } from '../core/neighborhood';
+import type { GraphDiff } from '../core/snapshot';
 
 interface SimNode {
   id: string;
@@ -27,12 +29,20 @@ export interface GhostData {
   nodes: { id: string; label: string }[];
   links: { source: string; target: string }[];
   anchorId: string | null;
+  // Border/link tint for the preview. Defaults to GHOST_ACCENT (proposal
+  // yellow); the snapshot diff view (F8) reuses the ghost mechanism with a red
+  // accent to show removed nodes/edges.
+  accent?: string;
 }
 
 const MOVE_STEP = 8;
 const DIM_OPACITY = 0.12;
 const GHOST_OPACITY = 0.5;
 const GHOST_ACCENT = '#ffd54a';
+// Snapshot diff (F8) colors, matching the toast/onboarding accents.
+const DIFF_ADDED = '#5fd08a';
+const DIFF_CHANGED = '#ffd54a';
+const DIFF_REMOVED = '#e05a5a';
 
 export class View3D {
   // 3d-force-graph has no useful public types; this is the documented `any` boundary.
@@ -40,6 +50,11 @@ export class View3D {
   private simNodes: SimNode[] = [];
   private simLinks: { id: string; source: string; target: string; ghost?: boolean }[] = [];
   private ghost: GhostData | null = null;
+  // Snapshot diff overlay (F8): per-id tints for present (added/changed)
+  // nodes/edges. Removed nodes/edges are shown via the red-accented ghost.
+  // Non-null iff a diff view is active.
+  private diffNodeColors: Map<string, string> | null = null;
+  private diffLinkColors: Map<string, string> | null = null;
   private hoverNodeId: string | null = null;
   private linkMode = false;
   private focusMode = false;
@@ -67,7 +82,10 @@ export class View3D {
       .linkDirectionalArrowLength(4)
       .linkDirectionalArrowRelPos(1)
       .linkOpacity(0.35)
-      .linkColor((l: { ghost?: boolean }) => (l.ghost ? GHOST_ACCENT : '#5b6b80'))
+      .linkColor((l: { id: string; ghost?: boolean }) => {
+        if (l.ghost) return this.ghost?.accent ?? GHOST_ACCENT;
+        return this.diffLinkColors?.get(l.id) ?? '#5b6b80';
+      })
       .nodeThreeObject((n: SimNode) => this.makeSprite(n))
       .onNodeClick((n: SimNode) => this.handleNodeClick(n.id))
       .onNodeHover((n: SimNode | null) => {
@@ -132,7 +150,7 @@ export class View3D {
       const sprite = new SpriteText(g.label === '' ? '·' : g.label);
       sprite.textHeight = 6;
       sprite.color = '#dfe6ee';
-      sprite.borderColor = GHOST_ACCENT;
+      sprite.borderColor = this.ghost?.accent ?? GHOST_ACCENT;
       sprite.borderWidth = 0.6;
       const mat = sprite.material as THREE.Material;
       mat.opacity = GHOST_OPACITY;
@@ -144,7 +162,11 @@ export class View3D {
     const sprite = new SpriteText(m.label === '' ? '·' : m.label);
     sprite.textHeight = 6;
     const selected = this.selection.get() === n.id;
-    sprite.color = selected ? '#ffd54a' : (m.color ?? '#dfe6ee');
+    // In a diff view, added/changed nodes take their diff tint (removed nodes
+    // are separate red ghosts). Otherwise selection highlight, then the node's
+    // own color, then the default.
+    const diffColor = this.diffNodeColors?.get(n.id);
+    sprite.color = diffColor ?? (selected ? '#ffd54a' : (m.color ?? '#dfe6ee'));
     if (m.fx !== null) sprite.borderColor = selected ? '#ffd54a' : '#5b6b80';
     if (m.fx !== null) sprite.borderWidth = 0.4;
     const mat = sprite.material as THREE.Material;
@@ -220,6 +242,47 @@ export class View3D {
     }
     this.ghost = null;
     this.rebuild();
+  }
+
+  // Snapshot diff view (F8): tint present added/changed nodes and edges, and
+  // render the removed nodes/edges as red ghosts. `before` is the snapshot's
+  // materialized state — it supplies the removed nodes' labels and the removed
+  // edges' endpoints, which are no longer in the live store. Reuses the ghost
+  // mechanism (red accent) for the removals, so it composes with the existing
+  // pendingSpawn placement. A single rebuild repaints everything.
+  showDiff(diff: GraphDiff, before: GraphState): void {
+    this.diffNodeColors = new Map();
+    for (const id of diff.nodesAdded) this.diffNodeColors.set(id, DIFF_ADDED);
+    for (const id of diff.nodesChanged) this.diffNodeColors.set(id, DIFF_CHANGED);
+    this.diffLinkColors = new Map();
+    for (const id of diff.edgesAdded) this.diffLinkColors.set(id, DIFF_ADDED);
+    for (const id of diff.edgesChanged) this.diffLinkColors.set(id, DIFF_CHANGED);
+    const removedNodes = diff.nodesRemoved.map((id) => {
+      const n = before.nodes.get(id);
+      if (!n) throw new Error(`showDiff: removed node "${id}" missing from before-state`);
+      return { id, label: n.label };
+    });
+    const removedLinks = diff.edgesRemoved.map((id) => {
+      const e = before.edges.get(id);
+      if (!e) throw new Error(`showDiff: removed edge "${id}" missing from before-state`);
+      return { source: e.source, target: e.target };
+    });
+    // Clear any prior ghost's seeds before installing the diff ghost.
+    if (this.ghost) {
+      for (const g of this.ghost.nodes) this.pendingSpawn.delete(g.id);
+    }
+    this.ghost = { nodes: removedNodes, links: removedLinks, anchorId: null, accent: DIFF_REMOVED };
+    this.rebuild();
+  }
+
+  clearDiff(): void {
+    this.diffNodeColors = null;
+    this.diffLinkColors = null;
+    this.clearGhost(); // drops the red removed-node ghosts + rebuilds
+  }
+
+  diffActive(): boolean {
+    return this.diffNodeColors !== null;
   }
 
   private syncProps(ids: string[]): void {

@@ -1,7 +1,15 @@
 import type { GraphState, MindEdge, MindNode } from './model';
 import { emptyState } from './model';
+import type { Snapshot } from './snapshot';
 
-export const FILE_VERSION = 1;
+// v2 (bumped from v1 in F8): required { version, meta, nodes, edges } plus an
+// OPTIONAL set that later tasks extend (F8 snapshots; F9 viewpoints/tours; F12
+// mode). An absent optional section loads as its default (snapshots → []), so a
+// v1 file — which has none of them — upgrades in memory with zero data loss.
+// A present-but-malformed optional value still throws (fail-fast). Both v1 and
+// v2 are accepted; any other version is rejected.
+export const FILE_VERSION = 2;
+export const SUPPORTED_VERSIONS = new Set([1, 2]);
 
 export interface MapMeta {
   name: string;
@@ -9,13 +17,18 @@ export interface MapMeta {
   modifiedAt: string;
 }
 
-export function serializeGraph(state: GraphState, meta: MapMeta): string {
+export function serializeGraph(
+  state: GraphState,
+  meta: MapMeta,
+  extras?: { snapshots?: Snapshot[] }
+): string {
   return JSON.stringify(
     {
       version: FILE_VERSION,
       meta,
       nodes: [...state.nodes.values()],
-      edges: [...state.edges.values()]
+      edges: [...state.edges.values()],
+      snapshots: extras?.snapshots ?? []
     },
     null,
     2
@@ -57,7 +70,11 @@ const NODE_KEYS = new Set([
 ]);
 const EDGE_KEYS = new Set(['id', 'source', 'target', 'label']);
 const META_KEYS = new Set(['name', 'createdAt', 'modifiedAt']);
-const TOP_KEYS = new Set(['version', 'meta', 'nodes', 'edges']);
+// The v2 top level: required keys always present; optional keys default when
+// absent. Later tasks push into TOP_OPTIONAL (F9 viewpoints/tours, F12 mode).
+const TOP_REQUIRED = new Set(['version', 'meta', 'nodes', 'edges']);
+const TOP_OPTIONAL = new Set(['snapshots']);
+const SNAPSHOT_KEYS = new Set(['id', 'name', 'createdAt', 'nodes', 'edges']);
 const RESULT_KEYS = new Set(['text', 'timestamp']);
 
 function parseNode(v: unknown, ctx: string): MindNode {
@@ -109,7 +126,51 @@ function parseEdge(v: unknown, ctx: string, nodeIds: Set<string>): MindEdge {
   return { id, source, target, label: strOrNull(v['label'], `${c}.label`) };
 }
 
-export function deserializeGraph(text: string): { state: GraphState; meta: MapMeta } {
+// A snapshot's edges reference the snapshot's OWN nodes, so validate them
+// against that node set (not the live graph). Reuses parseNode/parseEdge for
+// strict field checking.
+function parseSnapshot(v: unknown, ctx: string): Snapshot {
+  if (!isObj(v)) throw new Error(`${ctx}: expected object`);
+  const id = str(v['id'], `${ctx}.id`);
+  const c = `${ctx} (id="${id}")`;
+  checkKeys(v, SNAPSHOT_KEYS, c);
+  const name = str(v['name'], `${c}.name`);
+  const createdAt = str(v['createdAt'], `${c}.createdAt`);
+  if (!Array.isArray(v['nodes'])) throw new Error(`${c}: "nodes" must be an array`);
+  if (!Array.isArray(v['edges'])) throw new Error(`${c}: "edges" must be an array`);
+  const nodes: MindNode[] = [];
+  const nodeIds = new Set<string>();
+  v['nodes'].forEach((n, i) => {
+    const node = parseNode(n, `${c}.nodes[${i}]`);
+    if (nodeIds.has(node.id)) throw new Error(`${c}.nodes[${i}]: duplicate node id "${node.id}"`);
+    nodeIds.add(node.id);
+    nodes.push(node);
+  });
+  const edges: MindEdge[] = [];
+  const edgeIds = new Set<string>();
+  v['edges'].forEach((e, i) => {
+    const edge = parseEdge(e, `${c}.edges[${i}]`, nodeIds);
+    if (edgeIds.has(edge.id)) throw new Error(`${c}.edges[${i}]: duplicate edge id "${edge.id}"`);
+    edgeIds.add(edge.id);
+    edges.push(edge);
+  });
+  return { id, name, createdAt, nodes, edges };
+}
+
+// Top-level key check: reject anything outside required∪optional; require every
+// required key. Optional keys may be absent (they default in deserializeGraph).
+function checkTopKeys(obj: Record<string, unknown>): void {
+  for (const k of Object.keys(obj)) {
+    if (!TOP_REQUIRED.has(k) && !TOP_OPTIONAL.has(k)) {
+      throw new Error(`mind3d file: unknown field "${k}"`);
+    }
+  }
+  for (const k of TOP_REQUIRED) {
+    if (!(k in obj)) throw new Error(`mind3d file: missing field "${k}"`);
+  }
+}
+
+export function deserializeGraph(text: string): { state: GraphState; meta: MapMeta; snapshots: Snapshot[] } {
   let doc: unknown;
   try {
     doc = JSON.parse(text);
@@ -117,9 +178,10 @@ export function deserializeGraph(text: string): { state: GraphState; meta: MapMe
     throw new Error(`mind3d file is not valid JSON: ${(e as Error).message}`);
   }
   if (!isObj(doc)) throw new Error('mind3d file: top level must be an object');
-  checkKeys(doc, TOP_KEYS, 'mind3d file');
-  if (doc['version'] !== FILE_VERSION) {
-    throw new Error(`mind3d file: version ${String(doc['version'])} not supported (expected ${FILE_VERSION})`);
+  checkTopKeys(doc);
+  const version = doc['version'];
+  if (typeof version !== 'number' || !SUPPORTED_VERSIONS.has(version)) {
+    throw new Error(`mind3d file: version ${String(version)} not supported (expected 1 or 2)`);
   }
   if (!isObj(doc['meta'])) throw new Error('mind3d file: "meta" must be an object');
   checkKeys(doc['meta'], META_KEYS, 'meta');
@@ -142,5 +204,14 @@ export function deserializeGraph(text: string): { state: GraphState; meta: MapMe
     if (state.edges.has(edge.id)) throw new Error(`edges[${i}]: duplicate edge id "${edge.id}"`);
     state.edges.set(edge.id, edge);
   });
-  return { state, meta };
+  // Optional in v2, absent in v1 → the in-memory upgrade default (empty list).
+  // Present-but-not-an-array is a hard error (fail-fast); each snapshot is
+  // validated strictly.
+  let snapshots: Snapshot[] = [];
+  if ('snapshots' in doc) {
+    const raw = doc['snapshots'];
+    if (!Array.isArray(raw)) throw new Error('mind3d file: "snapshots" must be an array');
+    snapshots = raw.map((s, i) => parseSnapshot(s, `snapshots[${i}]`));
+  }
+  return { state, meta, snapshots };
 }

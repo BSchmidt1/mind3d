@@ -13,6 +13,7 @@ import { CommandPalette } from './ui/commandPalette';
 import { ProposalPanel } from './ui/proposalPanel';
 import { installAsk } from './ui/askController';
 import { installImport } from './ui/importController';
+import { installSnapshots } from './ui/snapshotController';
 
 export const store = new GraphStore();
 export const selection = new Selection();
@@ -323,3 +324,10 @@ installAsk({ store, selection, view3d, proposalPanel, registry, session });
 // structure, previewed via the shared proposal panel. Palette-only
 // (`import-map`) — no new top-bar button.
 installImport({ store, selection, view3d, proposalPanel, registry, session });
+
+// --- snapshots + visual diff (F8) ---
+// Named checkpoints saved with the map; a diff view coloring added/changed
+// nodes+edges and red-ghosting removals. Palette-only (snapshot-save /
+// -compare / -restore, diff-clear); the diff renders through View3D.showDiff,
+// never as DOM inside #view3d.
+installSnapshots({ store, view3d, registry, session });

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { createEdge, createNode, emptyState } from '../src/renderer/src/core/model';
 import { deserializeGraph, serializeGraph, type MapMeta } from '../src/renderer/src/core/serialize';
+import { createSnapshot } from '../src/renderer/src/core/snapshot';
 
 const meta: MapMeta = { name: 'm', createdAt: '2026-09-01T00:00:00Z', modifiedAt: '2026-09-01T00:00:00Z' };
 
@@ -36,8 +37,50 @@ describe('serialize', () => {
   });
 
   test('rejects wrong version', () => {
-    const bad = JSON.stringify({ version: 2, meta, nodes: [], edges: [] });
-    expect(() => deserializeGraph(bad)).toThrow(/version 2.*expected 1/s);
+    const bad = JSON.stringify({ version: 3, meta, nodes: [], edges: [] });
+    expect(() => deserializeGraph(bad)).toThrow(/version 3.*expected 1 or 2/s);
+  });
+
+  test('accepts a v1 file (no snapshots) and upgrades to empty snapshots', () => {
+    // A minimal v1 doc — exactly the shape existing/demo maps are saved in:
+    // version 1, required keys only, no optional sections.
+    const s = sampleState();
+    const v1 = JSON.stringify({
+      version: 1,
+      meta,
+      nodes: [...s.nodes.values()],
+      edges: [...s.edges.values()]
+    });
+    const out = deserializeGraph(v1);
+    expect(out.meta).toEqual(meta);
+    expect([...out.state.nodes.keys()]).toEqual([...s.nodes.keys()]);
+    expect([...out.state.edges.keys()]).toEqual([...s.edges.keys()]);
+    expect(out.state.nodes).toEqual(s.nodes);
+    expect(out.state.edges).toEqual(s.edges);
+    expect(out.snapshots).toEqual([]);
+  });
+
+  test('round-trips snapshots (v2)', () => {
+    const s = sampleState();
+    const snap = createSnapshot('checkpoint 1', s);
+    const out = deserializeGraph(serializeGraph(s, meta, { snapshots: [snap] }));
+    expect(out.snapshots).toHaveLength(1);
+    expect(out.snapshots[0]!.id).toBe(snap.id);
+    expect(out.snapshots[0]!.name).toBe('checkpoint 1');
+    expect(out.snapshots[0]!.createdAt).toBe(snap.createdAt);
+    expect(out.snapshots[0]!.nodes).toEqual(snap.nodes);
+    expect(out.snapshots[0]!.edges).toEqual(snap.edges);
+  });
+
+  test('two-arg serialize omits snapshots → deserialize defaults to []', () => {
+    const out = deserializeGraph(serializeGraph(sampleState(), meta));
+    expect(out.snapshots).toEqual([]);
+  });
+
+  test('rejects a malformed snapshot (fail-fast), naming it', () => {
+    const doc = JSON.parse(serializeGraph(sampleState(), meta, { snapshots: [createSnapshot('c', sampleState())] }));
+    doc.snapshots[0].bogus = 1;
+    expect(() => deserializeGraph(JSON.stringify(doc))).toThrow(/snapshots\[0\].*bogus/s);
   });
 
   test('rejects unknown node field, naming node and field', () => {

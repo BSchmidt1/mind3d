@@ -184,3 +184,54 @@ body { margin: 0; background: #14181f; color: #dfe6ee; font: 13px/1.45 system-ui
   border-radius: 4px; padding: 4px 14px; cursor: pointer;
 }
 #voice-confirm .vc-actions .vc-run { background: #234b34; border-color: #5fd08a; color: #dfffe9; }
+
+/* Snapshot name prompt (F8): single-line checkpoint name over a dim backdrop. */
+#name-prompt {
+  position: fixed; inset: 0; z-index: 160;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 14%; background: #0006;
+}
+#name-prompt[hidden] { display: none; }
+#name-prompt .name-card {
+  width: min(460px, 90vw); background: #1b212b; border: 1px solid #3a4656;
+  border-radius: 8px; padding: 14px 16px; box-shadow: 0 8px 40px #000a;
+}
+#name-prompt .name-label { font-weight: 600; margin-bottom: 8px; color: #dfe6ee; }
+#name-prompt .name-input {
+  width: 100%; box-sizing: border-box; background: #10141a; color: #dfe6ee;
+  border: 1px solid #3a4656; border-radius: 4px; padding: 8px 10px; font: inherit; outline: none;
+}
+#name-prompt .name-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+#name-prompt .name-actions button {
+  background: #2a3340; color: #dfe6ee; border: 1px solid #3a4656;
+  border-radius: 4px; padding: 4px 14px; cursor: pointer;
+}
+#name-prompt .name-actions .name-go { background: #234b34; border-color: #5fd08a; color: #dfffe9; }
+
+/* Snapshot picker (F8): choose one checkpoint to compare or restore. */
+#snapshot-picker {
+  position: fixed; inset: 0; z-index: 160;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 10%; background: #0006; outline: none;
+}
+#snapshot-picker[hidden] { display: none; }
+#snapshot-picker .snapshot-card {
+  width: min(520px, 90vw); max-height: 70vh; display: flex; flex-direction: column;
+  background: #1b212b; border: 1px solid #3a4656; border-radius: 8px;
+  padding: 14px 16px; box-shadow: 0 8px 40px #000a;
+}
+#snapshot-picker .snapshot-title { font-weight: 600; margin-bottom: 8px; color: #dfe6ee; }
+#snapshot-picker .snapshot-list { overflow-y: auto; }
+#snapshot-picker .snapshot-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 8px 10px; border: 1px solid #2a3340; border-radius: 4px; margin-bottom: 6px;
+  cursor: pointer; background: #10141a;
+}
+#snapshot-picker .snapshot-row:hover { border-color: #5b6b80; background: #17202b; }
+#snapshot-picker .snapshot-name { color: #dfe6ee; font-weight: 500; }
+#snapshot-picker .snapshot-when { color: #8fa1b8; font-size: 12px; white-space: nowrap; }
+#snapshot-picker .snapshot-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
+#snapshot-picker .snapshot-actions button {
+  background: #2a3340; color: #dfe6ee; border: 1px solid #3a4656;
+  border-radius: 4px; padding: 4px 14px; cursor: pointer;
+}
