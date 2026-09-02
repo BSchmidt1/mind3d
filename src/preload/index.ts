@@ -39,7 +39,8 @@ const api: Mind3dApi = {
     // Single-subscriber semantics: last subscription wins.
     ipcRenderer.removeAllListeners('voice-error');
     ipcRenderer.on('voice-error', (_e, err: VoiceError) => cb(err));
-  }
+  },
+  voiceClaude: (prompt, cwd) => ipcRenderer.invoke('voice-claude', prompt, cwd)
 };
 
 contextBridge.exposeInMainWorld('mind3d', api);

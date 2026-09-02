@@ -37,6 +37,7 @@ export interface Mind3dApi {
   voiceEnd(): void;
   onVoiceTranscript(cb: (t: VoiceTranscript) => void): void;
   onVoiceError(cb: (e: VoiceError) => void): void;
+  voiceClaude(prompt: string, cwd: string): Promise<string>;
 }
 
 declare global {
