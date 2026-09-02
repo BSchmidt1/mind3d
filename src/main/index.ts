@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { registerPersistenceIpc } from './persistence';
 import { registerClaudeIpc } from './claudeRunner';
 import { registerVoiceIpc } from './voiceRunner';
+import { registerClaudeOneshotIpc } from './claudeOneshot';
 
 let win: BrowserWindow | null = null;
 export function getWindow(): BrowserWindow | null {
@@ -68,6 +69,7 @@ function createWindow(): void {
 registerPersistenceIpc(getWindow);
 registerClaudeIpc();
 registerVoiceIpc();
+registerClaudeOneshotIpc();
 
 app.on('before-quit', (e) => {
   if (saved) return;

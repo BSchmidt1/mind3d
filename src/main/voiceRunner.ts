@@ -88,41 +88,4 @@ export function registerVoiceIpc(): void {
     // (registered in voice-begin) sends voice-transcript and clears
     // `current` once nerd-dictation flushes the transcript and exits.
   });
-
-  ipcMain.handle('voice-claude', async (_e, prompt: string, cwd: string): Promise<string> => {
-    if (typeof prompt !== 'string' || prompt.trim() === '') {
-      throw new Error('voice-claude: prompt must be a non-empty string');
-    }
-    if (typeof cwd !== 'string' || cwd.trim() === '') {
-      throw new Error('voice-claude: cwd must be a non-empty string');
-    }
-    return new Promise<string>((resolve, reject) => {
-      const child = spawn('claude', ['-p', prompt, '--output-format', 'text'], {
-        cwd,
-        env: process.env
-      });
-      // Nothing to send on stdin; ending it immediately avoids the ~3s
-      // stdin-wait the per-node runner incurs before claude gives up on
-      // piped input.
-      child.stdin.end();
-      let stdout = '';
-      let stderr = '';
-      child.stdout.on('data', (d: Buffer) => {
-        stdout += d.toString();
-      });
-      child.stderr.on('data', (d: Buffer) => {
-        stderr += d.toString();
-      });
-      child.on('error', (err) => {
-        reject(new Error(`failed to start claude: ${err.message}`));
-      });
-      child.on('close', (code) => {
-        if (code === 0) {
-          resolve(stdout);
-        } else {
-          reject(new Error(`claude exited with code ${String(code)}: ${stderr.trim()}`));
-        }
-      });
-    });
-  });
 }

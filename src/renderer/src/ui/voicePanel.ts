@@ -113,7 +113,7 @@ export class VoicePanel {
         ? await window.mind3d.dirname(selectedNode.attachedFile)
         : await this.session.getMapDir();
 
-      claudeText = await window.mind3d.voiceClaude(prompt, cwd);
+      claudeText = await window.mind3d.askClaude(prompt, cwd);
       const result = parseVoiceResult(claudeText);
       const plan = planFromVoiceResult(result, new Set(this.store.state.nodes.keys()));
 
