@@ -131,6 +131,12 @@ export class VoicePanel {
   // A transcript arrived: an empty one ends the cycle idle; otherwise open the
   // editable confirm gate (inFlight stays true until the user Runs or Cancels).
   private onTranscript(transcript: string): void {
+    // Hold inFlight for the whole confirm→think→apply span regardless of how we
+    // got here: begin() sets it, but an out-of-band voice-transcript would
+    // otherwise open the confirm box with inFlight=false and leave the "mic
+    // blocked during confirm" guard unenforced. runClaude's finally / the
+    // empty + cancel paths still clear it, so this is strictly safer.
+    this.inFlight = true;
     if (transcript.trim() === '') {
       notify.info('voice: nothing heard');
       this.inFlight = false;
@@ -210,7 +216,10 @@ export class VoicePanel {
         this.selection.set(plan.rootId);
         this.view3d.flyTo(plan.rootId);
       }
-      p.done('success', `${plan.newNodeIds.length} added — Ctrl+Z to undo · ${opSet.summary}`);
+      p.done(
+        'success',
+        `${plan.newNodeIds.length} nodes, ${plan.newEdges.length} edges added — Ctrl+Z to undo · ${opSet.summary}`
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (p !== undefined) p.done('error', `voice ERROR: ${msg}`);
