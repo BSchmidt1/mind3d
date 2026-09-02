@@ -8,7 +8,10 @@
 //          its label + relation commits, and reopening the editor from the
 //          command palette reads the SAME values back from the store — proving
 //          the edits went through setEdgeLabel/setEdgeRelation commands;
-//   C      Delete on the selected edge removes it (edge selection reconciles).
+//   C      an edge label containing `<img onerror=…>` renders in the hover
+//          tooltip as literal text (no <img> element, no script) — the
+//          linkLabel accessor returns a textContent element, not a string;
+//   D      Delete on the selected edge removes it (edge selection reconciles).
 //
 // Node positions are deterministic: a double-click pins a node at the world
 // point under the cursor, so the edge midpoint is ~the screen midpoint of the
@@ -248,32 +251,77 @@ async function main() {
     await screenshot(page, 'f10-b-failure.png');
   }
 
-  // --- C: Delete removes the selected edge ---
+  // --- C: an edge label with HTML is shown as text, never executed (XSS) ---
+  // float-tooltip renders a string via innerHTML but appends an HTMLElement
+  // verbatim; the linkLabel accessor returns a textContent element, so a label
+  // like `<img onerror=…>` must appear as literal text with no <img> created
+  // and no script run. Edge labels are user/Claude/F5-import-authored.
+  const XSS_LABEL = 'XSSPROBE<img src=x onerror="window.__XSS_FIRED=1">';
   try {
-    // Close the editor (Escape leaves the edge selected), then Delete it.
+    // The editor is open (reopened in B, label input focused) — overwrite the
+    // label with the malicious value and commit, then close the editor so it
+    // doesn't cover the edge while hovering.
+    await page.evaluate((label) => {
+      const li = document.getElementById('edge-editor-label');
+      li.value = label;
+      li.dispatchEvent(new Event('change', { bubbles: true }));
+    }, XSS_LABEL);
     await page.keyboard.press('Escape');
     await withTimeout(
       page.waitForFunction(() => document.getElementById('edge-editor')?.hidden === true),
       3500,
-      'editor hidden before delete (C)'
+      'editor closed before hover (C)'
     );
+    await blurActive(page);
+    // Hover the edge (broad mousemove scan) until the tooltip shows the label.
+    let tooltipText = null;
+    outerHover: for (const dy of [0, 8, -8, 16, -16, 24, -24, 32, -32]) {
+      for (let dx = -Math.round(box.width * 0.32); dx <= Math.round(box.width * 0.32); dx += 12) {
+        await page.mouse.move(cx + dx, cy + dy);
+        await page.waitForTimeout(16); // let the render tick set tooltip content
+        tooltipText = await page.evaluate(() => {
+          const t = document.querySelector('.float-tooltip-kap');
+          return t && t.textContent && t.textContent.includes('XSSPROBE') ? t.textContent : null;
+        });
+        if (tooltipText !== null) break outerHover;
+      }
+    }
+    if (tooltipText === null) throw new Error('edge tooltip never showed the label (hover missed the edge)');
+    const safety = await page.evaluate(() => ({
+      xssFired: window.__XSS_FIRED,
+      injectedImg: document.querySelector('.float-tooltip-kap img, img[src="x"]') !== null,
+      tooltipImg: document.querySelector('.float-tooltip-kap img') !== null
+    }));
+    if (safety.xssFired !== undefined) throw new Error('XSS executed: window.__XSS_FIRED was set');
+    if (safety.injectedImg || safety.tooltipImg) throw new Error('label was parsed as HTML (an <img> element was created)');
+    if (!tooltipText.includes('<img')) throw new Error(`tooltip text unexpectedly stripped markup: "${tooltipText}"`);
+    record('C (edge-label tooltip is XSS-safe)', 'PASS', 'malicious edge label rendered as literal text; no <img> element, no script executed');
+  } catch (err) {
+    record('C (edge-label tooltip is XSS-safe)', 'FAIL', err.message);
+    await screenshot(page, 'f10-c-failure.png');
+  }
+
+  // --- D: Delete removes the selected edge ---
+  // The edge is still selected from C (its editor was closed there without
+  // deselecting). Do NOT press Escape here — with the editor already closed and
+  // focus on the body, Escape would hit the global handler and deselect the edge
+  // (setEdge(null)) before Delete. Just move focus off any input and Delete.
+  try {
     await blurActive(page);
     await page.keyboard.press('Delete');
     await withTimeout(
-      page.waitForFunction(
-        () =>
-          [...document.querySelectorAll('#status-counts')].some((e) =>
-            (e.textContent ?? '').includes('0 edges')
-          ),
-        { timeout: 4000 }
+      page.waitForFunction(() =>
+        [...document.querySelectorAll('#status-counts')].some((e) =>
+          (e.textContent ?? '').includes('0 edges')
+        )
       ),
       4500,
-      'wait 0 edges in counts (C)'
+      'wait 0 edges in counts (D)'
     );
-    record('C (delete selected edge)', 'PASS', 'Delete removed the selected edge; counts show 0 edges');
+    record('D (delete selected edge)', 'PASS', 'Delete removed the selected edge; counts show 0 edges');
   } catch (err) {
-    record('C (delete selected edge)', 'FAIL', err.message);
-    await screenshot(page, 'f10-c-failure.png');
+    record('D (delete selected edge)', 'FAIL', err.message);
+    await screenshot(page, 'f10-d-failure.png');
   }
 
   await screenshot(page, 'f10-final.png');

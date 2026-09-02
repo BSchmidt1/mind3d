@@ -123,7 +123,15 @@ export class View3D {
         const parts: string[] = [];
         if (l.relation !== undefined && l.relation !== 'none') parts.push(l.relation);
         if (l.label) parts.push(l.label);
-        return parts.join(': ');
+        if (parts.length === 0) return '';
+        // SECURITY: edge labels are user/Claude-authored and can carry
+        // F5-imported web content. float-tooltip renders a STRING via innerHTML
+        // (an XSS sink), but appends an HTMLElement verbatim. Return a detached
+        // element whose text is set via textContent so a label like
+        // `<img src=x onerror=…>` is shown as literal text, never parsed.
+        const el = document.createElement('div');
+        el.textContent = parts.join(': ');
+        return el;
       })
       .onLinkHover((l: { id: string } | null) => {
         this.hoverLinkId = l ? l.id : null;
