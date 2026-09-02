@@ -180,19 +180,7 @@ export class View3D {
 
     this.container.addEventListener('dblclick', (ev) => {
       if (this.hoverNodeId !== null) return;
-      const p = this.worldPointAt(ev.clientX, ev.clientY);
-      // In 2D mode keep new nodes on the z=0 plane (the top-down view already
-      // intersects near z=0, but pin it exactly so the layout stays flat).
-      if (this.dimsValue === 2) p.z = 0;
-      const node = createNode('new node');
-      node.fx = p.x;
-      node.fy = p.y;
-      node.fz = p.z;
-      this.pendingSpawn.set(node.id, p);
-      this.store.apply(addNode(node));
-      this.selection.set(node.id);
-      this.suppressNextBgClick = true;
-      this.beginLabelEdit(node.id);
+      this.createNodeAtPoint(ev.clientX, ev.clientY);
     });
 
     window.addEventListener('keydown', (ev) => this.handleKey(ev));
@@ -455,6 +443,17 @@ export class View3D {
     this.focusSet = nHopNeighborhood(this.store.state.edges.values(), sel, 2);
   }
 
+  // Enter link-creation mode from a source node: select it, then wait for a
+  // click on the target node (handleNodeClick reads the selection as the source
+  // and applies addEdge). Shared by the 'l' shortcut and the context menu's
+  // "Link from here".
+  private enterLinkMode(fromId: string): void {
+    this.selection.set(fromId);
+    this.linkMode = true;
+    this.container.style.cursor = 'crosshair';
+    this.onStatus('link mode: click target node (Esc cancels)');
+  }
+
   private handleNodeClick(id: string): void {
     if (this.linkMode) {
       const from = this.selection.get();
@@ -518,6 +517,42 @@ export class View3D {
   // later tasks to target the hovered edge).
   hoveredLink(): string | null {
     return this.hoverLinkId;
+  }
+
+  // The node under the cursor, or null (the context menu targets it on a
+  // right-click; a hovered node takes priority over a hovered edge).
+  hoveredNode(): string | null {
+    return this.hoverNodeId;
+  }
+
+  // The view container element — the context menu attaches its 'contextmenu'
+  // listener here (named getContainer to avoid clashing with the private
+  // `container` field).
+  getContainer(): HTMLElement {
+    return this.container;
+  }
+
+  // Public wrappers over the existing private node interactions, so the context
+  // menu drives the SAME code paths as the keyboard shortcuts (no duplicated
+  // mutation logic — every path still goes through the command store).
+  addChildTo(id: string): void {
+    this.addChild(id);
+  }
+
+  startLinkFrom(id: string): void {
+    this.enterLinkMode(id);
+  }
+
+  togglePinFor(id: string): void {
+    this.togglePin(id);
+  }
+
+  // Delete a node by id (context menu / palette). Clears its selection first if
+  // it was selected, then applies the same deleteNode command the Delete key
+  // uses (main.ts also reconciles a dangling selection centrally).
+  deleteNodeById(id: string): void {
+    if (this.selection.get() === id) this.selection.set(null);
+    this.store.apply(deleteNode(id));
   }
 
   // Select an edge and open its editor (palette / context-menu entry point).
@@ -585,11 +620,7 @@ export class View3D {
         }
         break;
       case 'l':
-        if (sel !== null) {
-          this.linkMode = true;
-          this.container.style.cursor = 'crosshair';
-          this.onStatus('link mode: click target node (Esc cancels)');
-        }
+        if (sel !== null) this.enterLinkMode(sel);
         break;
       case 'Escape':
         this.linkMode = false;
@@ -601,8 +632,7 @@ export class View3D {
       case 'Delete':
       case 'Backspace':
         if (sel !== null) {
-          this.selection.set(null);
-          this.store.apply(deleteNode(sel));
+          this.deleteNodeById(sel);
         } else {
           const edgeSel = this.selection.getEdge();
           if (edgeSel !== null) this.deleteEdgeById(edgeSel);
@@ -688,6 +718,32 @@ export class View3D {
     this.store.apply(composite('addChild', [addNode(child), addEdge(createEdge(parentId, child.id))]));
     this.selection.set(child.id);
     this.beginLabelEdit(child.id);
+  }
+
+  // Create a new node at a screen point (the shared body of the dblclick and
+  // the background context-menu "New node here"). Pins it at the picked world
+  // point, seeds pendingSpawn so the rebuild honours that placement, selects it,
+  // and opens its label editor.
+  private createNodeAtPoint(clientX: number, clientY: number): void {
+    const p = this.worldPointAt(clientX, clientY);
+    // In 2D mode keep new nodes on the z=0 plane (the top-down view already
+    // intersects near z=0, but pin it exactly so the layout stays flat).
+    if (this.dimsValue === 2) p.z = 0;
+    const node = createNode('new node');
+    node.fx = p.x;
+    node.fy = p.y;
+    node.fz = p.z;
+    this.pendingSpawn.set(node.id, p);
+    this.store.apply(addNode(node));
+    this.selection.set(node.id);
+    this.suppressNextBgClick = true;
+    this.beginLabelEdit(node.id);
+  }
+
+  // Public: create a node at a screen point (context menu "New node here").
+  // Reuses the same path as double-clicking empty space.
+  createNodeAt(clientX: number, clientY: number): void {
+    this.createNodeAtPoint(clientX, clientY);
   }
 
   private beginLabelEdit(id: string): void {

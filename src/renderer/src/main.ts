@@ -15,6 +15,7 @@ import { installAsk } from './ui/askController';
 import { installImport } from './ui/importController';
 import { installSnapshots } from './ui/snapshotController';
 import { installTours } from './ui/tourController';
+import { ContextMenu } from './ui/contextMenu';
 import { TagBar } from './ui/tagBar';
 import { collectTags } from './core/tags';
 
@@ -388,6 +389,15 @@ installAsk({ store, selection, view3d, proposalPanel, registry, session });
 // structure, previewed via the shared proposal panel. Palette-only
 // (`import-map`) — no new top-bar button.
 installImport({ store, selection, view3d, proposalPanel, registry, session });
+
+// --- right-click context menu (F13) ---
+// Surfaces the common node/edge/background actions (otherwise keyboard-only) on
+// right-click, reusing the same commands/flows and suppressing the native
+// browser menu on the 3D view. Self-wiring: it attaches its own listener to
+// view3d.getContainer(). Placed after installAsk/installImport so its "Ask
+// about this" / "Import…" items can resolve the `ask-map` / `import-map`
+// palette commands those installers register.
+new ContextMenu({ view3d, store, selection, proposalPanel, session, registry });
 
 // --- snapshots + visual diff (F8) ---
 // Named checkpoints saved with the map; a diff view coloring added/changed
