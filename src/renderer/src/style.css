@@ -72,6 +72,9 @@ body { margin: 0; background: #14181f; color: #dfe6ee; font: 13px/1.45 system-ui
 #btn-voice.active { background: #7a2a2a; border-color: #e05a5a; color: #ffdede; animation: voice-pulse 1s ease-in-out infinite; }
 @keyframes voice-pulse { 0%, 100% { box-shadow: 0 0 0 0 #e05a5a66; } 50% { box-shadow: 0 0 0 6px #e05a5a00; } }
 
+/* 2D mode engaged (F12): a calm blue "mode on" accent, matching the tag/info tokens. */
+#btn-2d.active { background: #1c2836; border-color: #6fb3ff; color: #eaf2ff; }
+
 #file-state { color: #8fa1b8; margin-left: 8px; }
 #help-overlay { position: fixed; inset: 15% 25%; background: #1b212b; border: 1px solid #3a4656; border-radius: 8px; padding: 16px 24px; z-index: 100; box-shadow: 0 8px 40px #000a; }
 

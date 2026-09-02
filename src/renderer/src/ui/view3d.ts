@@ -95,6 +95,12 @@ export class View3D {
   // colorOf(id) (its first tag's deterministic color) when that returns one,
   // else falls back to the node's own color / default. Null = no override.
   private colorByTag: ((nodeId: string) => string | null) | null = null;
+  // 2D mode (F12): 3 = full 3D orbit; 2 = top-down layout via numDimensions(2),
+  // orbit rotation disabled (pan/zoom kept), and z pinned to 0 for new/moved
+  // nodes so everything stays in the XY plane. View/map metadata (persisted with
+  // the map by MapSession), never a graph mutation — it does not go through the
+  // command store.
+  private dimsValue: 2 | 3 = 3;
   private keyMoveActive = false;
   private keyMoveNodeId: string | null = null;
   private pendingSpawn = new Map<string, { x: number; y: number; z: number }>();
@@ -175,6 +181,9 @@ export class View3D {
     this.container.addEventListener('dblclick', (ev) => {
       if (this.hoverNodeId !== null) return;
       const p = this.worldPointAt(ev.clientX, ev.clientY);
+      // In 2D mode keep new nodes on the z=0 plane (the top-down view already
+      // intersects near z=0, but pin it exactly so the layout stays flat).
+      if (this.dimsValue === 2) p.z = 0;
       const node = createNode('new node');
       node.fx = p.x;
       node.fy = p.y;
@@ -347,7 +356,7 @@ export class View3D {
         this.pendingSpawn.set(g.id, {
           x: base.x + 20 * (Math.random() - 0.5),
           y: base.y + 20 * (Math.random() - 0.5),
-          z: base.z + 20 * (Math.random() - 0.5)
+          z: this.dimsValue === 2 ? 0 : base.z + 20 * (Math.random() - 0.5)
         });
       }
       const p = this.pendingSpawn.get(g.id)!;
@@ -669,7 +678,7 @@ export class View3D {
     this.pendingSpawn.set(child.id, {
       x: base.x + 20 * (Math.random() - 0.5),
       y: base.y + 20 * (Math.random() - 0.5),
-      z: base.z + 20 * (Math.random() - 0.5)
+      z: this.dimsValue === 2 ? 0 : base.z + 20 * (Math.random() - 0.5)
     });
     this.store.apply(composite('addChild', [addNode(child), addEdge(createEdge(parentId, child.id))]));
     this.selection.set(child.id);
@@ -714,7 +723,7 @@ export class View3D {
       this.pendingSpawn.set(id, {
         x: base.x + 20 * (Math.random() - 0.5),
         y: base.y + 20 * (Math.random() - 0.5),
-        z: base.z + 20 * (Math.random() - 0.5)
+        z: this.dimsValue === 2 ? 0 : base.z + 20 * (Math.random() - 0.5)
       });
     }
   }
@@ -747,6 +756,52 @@ export class View3D {
 
   applyCamera(vp: { position: Vec3; target: Vec3 }, ms?: number): void {
     this.graph.cameraPosition(vp.position, vp.target, ms ?? 800);
+  }
+
+  // 2D / 3D mode (F12). ONE renderer, one code path: 2D constrains the SAME
+  // force layout to a plane (`numDimensions(2)`), locks the camera looking
+  // straight down the +Z axis at the XY layout plane, and disables orbit
+  // rotation (pan + zoom stay on). 3D restores full orbit. z-pinning for new/
+  // ghost/child nodes is handled at each spawn site (dblclick/addChild/
+  // spawnNear/appendGhost) via `dimsValue`.
+  setDims(n: 2 | 3): void {
+    if (n !== 2 && n !== 3) throw new Error(`setDims: expected 2 or 3, got ${String(n)}`);
+    this.dimsValue = n;
+    this.graph.numDimensions(n);
+    // 3d-force-graph's default control type is trackball, whose rotation flag is
+    // `noRotate`; also set orbit's `enableRotate` defensively so this stays
+    // correct if the control type is ever switched. Setting an absent property
+    // on the other control kind is harmless.
+    const controls = this.graph.controls();
+    controls.noRotate = n === 2;
+    controls.enableRotate = n !== 2;
+    if (n === 2) {
+      // Look straight down +Z at the layout centroid, preserving the current
+      // zoom distance. Pan/zoom remain enabled.
+      const cam = this.graph.camera() as THREE.PerspectiveCamera;
+      const target = controls.target as THREE.Vector3;
+      const dist = cam.position.distanceTo(target) || 300;
+      const c = this.centroid2D();
+      this.graph.cameraPosition({ x: c.x, y: c.y, z: dist }, { x: c.x, y: c.y, z: 0 }, 600);
+    }
+    this.graph.d3ReheatSimulation();
+  }
+
+  dims(): 2 | 3 {
+    return this.dimsValue;
+  }
+
+  // Mean XY of the current sim nodes (the point the 2D camera looks down at),
+  // or the origin when the map is empty.
+  private centroid2D(): { x: number; y: number } {
+    if (this.simNodes.length === 0) return { x: 0, y: 0 };
+    let sx = 0;
+    let sy = 0;
+    for (const n of this.simNodes) {
+      sx += n.x ?? 0;
+      sy += n.y ?? 0;
+    }
+    return { x: sx / this.simNodes.length, y: sy / this.simNodes.length };
   }
 
   toggleFocusMode(): void {

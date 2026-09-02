@@ -14,6 +14,10 @@ import type { Tour, TourStop, Vec3, Viewpoint } from './viewpoint';
 export const FILE_VERSION = 2;
 export const SUPPORTED_VERSIONS = new Set([1, 2]);
 
+// The layout/camera mode (F12), persisted per map as an optional top-level
+// scalar. Absent in every pre-F12 file (v1 and older v2) → defaults to '3d'.
+export type ViewMode = '2d' | '3d';
+
 export interface MapMeta {
   name: string;
   createdAt: string;
@@ -23,7 +27,7 @@ export interface MapMeta {
 export function serializeGraph(
   state: GraphState,
   meta: MapMeta,
-  extras?: { snapshots?: Snapshot[]; viewpoints?: Viewpoint[]; tours?: Tour[] }
+  extras?: { snapshots?: Snapshot[]; viewpoints?: Viewpoint[]; tours?: Tour[]; mode?: ViewMode }
 ): string {
   return JSON.stringify(
     {
@@ -33,7 +37,8 @@ export function serializeGraph(
       edges: [...state.edges.values()],
       snapshots: extras?.snapshots ?? [],
       viewpoints: extras?.viewpoints ?? [],
-      tours: extras?.tours ?? []
+      tours: extras?.tours ?? [],
+      mode: extras?.mode ?? '3d'
     },
     null,
     2
@@ -88,7 +93,7 @@ const META_KEYS = new Set(['name', 'createdAt', 'modifiedAt']);
 // The v2 top level: required keys always present; optional keys default when
 // absent. Later tasks push into TOP_OPTIONAL (F9 viewpoints/tours, F12 mode).
 const TOP_REQUIRED = new Set(['version', 'meta', 'nodes', 'edges']);
-const TOP_OPTIONAL = new Set(['snapshots', 'viewpoints', 'tours']);
+const TOP_OPTIONAL = new Set(['snapshots', 'viewpoints', 'tours', 'mode']);
 const SNAPSHOT_KEYS = new Set(['id', 'name', 'createdAt', 'nodes', 'edges']);
 const RESULT_KEYS = new Set(['text', 'timestamp']);
 const VEC3_KEYS = new Set(['x', 'y', 'z']);
@@ -263,6 +268,17 @@ function optionalArray<T>(
   return raw.map((item, i) => parseItem(item, `${key}[${i}]`));
 }
 
+// Parse the optional scalar `mode` (F12), or default to '3d' when absent. A
+// present value must be '2d' or '3d' (fail-fast otherwise).
+function optionalMode(doc: Record<string, unknown>): ViewMode {
+  if (!('mode' in doc)) return '3d';
+  const raw = doc['mode'];
+  if (raw !== '2d' && raw !== '3d') {
+    throw new Error(`mind3d file: "mode" must be "2d" or "3d", got ${JSON.stringify(raw)}`);
+  }
+  return raw;
+}
+
 // Top-level key check: reject anything outside required∪optional; require every
 // required key. Optional keys may be absent (they default in deserializeGraph).
 function checkTopKeys(obj: Record<string, unknown>): void {
@@ -282,6 +298,7 @@ export function deserializeGraph(text: string): {
   snapshots: Snapshot[];
   viewpoints: Viewpoint[];
   tours: Tour[];
+  mode: ViewMode;
 } {
   let doc: unknown;
   try {
@@ -322,5 +339,6 @@ export function deserializeGraph(text: string): {
   const snapshots = optionalArray(doc, 'snapshots', parseSnapshot);
   const viewpoints = optionalArray(doc, 'viewpoints', parseViewpoint);
   const tours = optionalArray(doc, 'tours', parseTour);
-  return { state, meta, snapshots, viewpoints, tours };
+  const mode = optionalMode(doc);
+  return { state, meta, snapshots, viewpoints, tours, mode };
 }

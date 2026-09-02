@@ -1,5 +1,5 @@
 import type { GraphStore } from './core/store';
-import { deserializeGraph, serializeGraph, type MapMeta } from './core/serialize';
+import { deserializeGraph, serializeGraph, type MapMeta, type ViewMode } from './core/serialize';
 import { emptyState } from './core/model';
 import { createSnapshot, snapshotToState, type Snapshot } from './core/snapshot';
 import type { Tour, Viewpoint } from './core/viewpoint';
@@ -16,12 +16,22 @@ export class MapSession {
   // metadata, serialized with the file, not command-tracked.
   private viewpoints: Viewpoint[] = [];
   private tours: Tour[] = [];
+  // 2D/3D layout mode (F12). Map metadata like the above: serialized with the
+  // file, not command-tracked. Applying it to the view (View3D.setDims) is the
+  // caller's job (main.ts orchestrates on open/new/toggle); the session only
+  // holds and persists the value. Defaults to '3d' for any file that predates it.
+  private mode: ViewMode = '3d';
 
   // The extras block written on every save/recovery. Centralized so the three
   // serialize call sites (autosave, quit-save, manual save) stay in sync as the
   // optional set grows.
-  private extras(): { snapshots: Snapshot[]; viewpoints: Viewpoint[]; tours: Tour[] } {
-    return { snapshots: this.snapshots, viewpoints: this.viewpoints, tours: this.tours };
+  private extras(): { snapshots: Snapshot[]; viewpoints: Viewpoint[]; tours: Tour[]; mode: ViewMode } {
+    return {
+      snapshots: this.snapshots,
+      viewpoints: this.viewpoints,
+      tours: this.tours,
+      mode: this.mode
+    };
   }
 
   constructor(
@@ -89,6 +99,7 @@ export class MapSession {
     this.snapshots = [];
     this.viewpoints = [];
     this.tours = [];
+    this.mode = '3d';
     this.store.loadState(emptyState());
     this.dirty = false;
     this.report();
@@ -101,12 +112,13 @@ export class MapSession {
     // deserializeGraph accepts v1 or v2 and throws with a precise message on a
     // bad file. Missing optional sections upgrade in memory to []: a v1 file has
     // none of them; an F8-era v2 file has snapshots but no viewpoints/tours.
-    const { state, meta, snapshots, viewpoints, tours } = deserializeGraph(res.json);
+    const { state, meta, snapshots, viewpoints, tours, mode } = deserializeGraph(res.json);
     this.path = res.path;
     this.meta = meta;
     this.snapshots = snapshots;
     this.viewpoints = viewpoints;
     this.tours = tours;
+    this.mode = mode;
     this.store.loadState(state);
     this.dirty = false;
     this.report();
@@ -130,6 +142,22 @@ export class MapSession {
   async getMapDir(): Promise<string> {
     if (this.path === null) return '/tmp';
     return window.mind3d.dirname(this.path);
+  }
+
+  // --- 2D/3D mode (F12) ---
+  // The persisted layout mode. `getMode` is read by main.ts on open/new to
+  // apply it to View3D; `setMode` is the user toggle, which marks the map dirty
+  // so the change is written by the next save (manual/autosave/quit).
+
+  getMode(): ViewMode {
+    return this.mode;
+  }
+
+  setMode(mode: ViewMode): void {
+    if (mode === this.mode) return;
+    this.mode = mode;
+    this.dirty = true;
+    this.report();
   }
 
   // --- snapshots (F8) ---

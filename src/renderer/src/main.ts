@@ -43,6 +43,7 @@ document.body.innerHTML = `
     <button id="btn-save">Save</button>
     <button id="btn-ask" title="ask Claude about this map">Ask</button>
     <button id="btn-voice" title="hold to speak">🎤</button>
+    <button id="btn-2d" title="toggle 2D / 3D layout">2D</button>
     <input id="search" placeholder="search… (fly-to)" />
     <div id="search-results" hidden></div>
     <span id="status-counts"></span>
@@ -203,12 +204,19 @@ function guard(fn: () => void | Promise<void>): void {
 
 function doNewMap(): void {
   guard(() => {
-    if (session.newMap()) notify.success('new map');
-    else notify.info('kept current map');
+    if (session.newMap()) {
+      applyMode();
+      notify.success('new map');
+    } else {
+      notify.info('kept current map');
+    }
   });
 }
 function doOpenMap(): void {
-  guard(() => session.open());
+  guard(async () => {
+    await session.open();
+    applyMode();
+  });
 }
 function doSaveMap(): void {
   guard(() => session.save());
@@ -221,6 +229,29 @@ registry.register({ id: 'new-map', title: 'New map', run: doNewMap });
 registry.register({ id: 'open-map', title: 'Open map', hint: 'Ctrl+O', run: doOpenMap });
 registry.register({ id: 'save-map', title: 'Save map', hint: 'Ctrl+S', run: doSaveMap });
 
+// --- 2D / 3D layout mode (F12) ---
+// A primary toggle (it changes the whole view): 2D flattens the SAME force
+// layout via numDimensions(2), locks the camera top-down, and disables orbit
+// (pan/zoom stay). The mode is map metadata held by MapSession and persisted
+// per map; the session is the single source of truth. `applyMode` pushes the
+// session's mode into View3D (on open/new/toggle); `session.setMode` records
+// the toggle and marks the map dirty.
+const btn2d = document.getElementById('btn-2d')!;
+function update2DButton(): void {
+  btn2d.classList.toggle('active', view3d.dims() === 2);
+}
+function applyMode(): void {
+  view3d.setDims(session.getMode() === '2d' ? 2 : 3);
+  update2DButton();
+}
+function doToggle2D(): void {
+  session.setMode(session.getMode() === '2d' ? '3d' : '2d');
+  applyMode();
+}
+btn2d.addEventListener('click', doToggle2D);
+registry.register({ id: 'toggle-2d', title: 'Toggle 2D / 3D mode', run: doToggle2D });
+update2DButton();
+
 window.addEventListener('keydown', (ev) => {
   if (!ev.ctrlKey) return;
   if (ev.key === 's') {
@@ -231,7 +262,7 @@ window.addEventListener('keydown', (ev) => {
   if (ev.key === 'o') {
     ev.preventDefault();
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-    guard(() => session.open());
+    doOpenMap();
   }
 });
 

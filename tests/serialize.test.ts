@@ -187,6 +187,31 @@ describe('serialize', () => {
     expect(() => deserializeGraph(JSON.stringify(doc))).toThrow(/relation.*nonsense/s);
   });
 
+  test('a file without a mode field loads as 3d (backward-compat)', () => {
+    // Every pre-F12 file — v1 and ALL older v2 (F8/F9/F10/F11-era) — has no
+    // `mode` key; it must still load, defaulting to 3D.
+    const doc = JSON.parse(serializeGraph(sampleState(), meta));
+    delete doc.mode;
+    const out = deserializeGraph(JSON.stringify(doc));
+    expect(out.mode).toBe('3d');
+  });
+
+  test('two-arg serialize → mode defaults to 3d', () => {
+    const out = deserializeGraph(serializeGraph(sampleState(), meta));
+    expect(out.mode).toBe('3d');
+  });
+
+  test('round-trips 2d mode', () => {
+    const out = deserializeGraph(serializeGraph(sampleState(), meta, { mode: '2d' }));
+    expect(out.mode).toBe('2d');
+  });
+
+  test('rejects an invalid mode, fail-fast', () => {
+    const doc = JSON.parse(serializeGraph(sampleState(), meta, { mode: '2d' }));
+    doc.mode = 'flat';
+    expect(() => deserializeGraph(JSON.stringify(doc))).toThrow(/mode.*flat/s);
+  });
+
   test('rejects unknown node field, naming node and field', () => {
     const doc = JSON.parse(serializeGraph(sampleState(), meta));
     doc.nodes[0].bogus = 1;
