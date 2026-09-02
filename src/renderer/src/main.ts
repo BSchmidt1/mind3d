@@ -162,7 +162,10 @@ export const session = new MapSession(store, (label) => {
 });
 
 // --- voice mode (push-to-talk) ---
-const voicePanel = new VoicePanel(store, selection, view3d, session, (m) => notify.info(m));
+// VoicePanel drives its own feedback via `notify` (a single updating progress
+// toast for the think→apply step, plus the editable transcript confirm gate),
+// so it no longer takes a setStatus callback.
+const voicePanel = new VoicePanel(store, selection, view3d, session);
 const voiceBtn = document.getElementById('btn-voice')!;
 function stopVoiceListening(): void {
   voicePanel.end();

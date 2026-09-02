@@ -126,17 +126,25 @@ login.
 
 ## Voice mode
 
-Hold the **🎤** button, speak an instruction, release, and Claude turns it into
-nodes and edges — added to your map as a single undoable step.
+Hold the **🎤** button, speak an instruction, **edit the heard text if needed**,
+Run, and Claude turns it into nodes and edges — added to your map as a single
+undoable step.
 
 1. Select a node first if you want the new nodes attached under it (optional).
-2. **Press and hold** 🎤. The status line shows **🎤 listening…**.
+2. **Press and hold** 🎤. A **🎤 listening…** toast appears and the button pulses.
 3. Speak a plain instruction, e.g. *"add three children under the selected node:
    grants, major donors, and events"*, or *"map the main sections of the attached
    file"* if the selected node has a document attached.
-4. **Release.** The status shows **🧠 thinking…**, then a short summary; the new
-   nodes appear near your selection.
-5. Not what you wanted? A single **Ctrl+Z** removes the whole voice result.
+4. **Release.** An **editable confirm box** pops up pre-filled with what was heard.
+   Fix any mis-heard word, then **Run** (or press **Ctrl+Enter**). **Cancel**
+   (or **Esc** / click outside) aborts without calling Claude.
+5. A single **🧠 thinking…** toast updates in place, then ends with a short summary
+   like *"3 added — Ctrl+Z to undo"*; the new nodes appear near your selection.
+6. Not what you wanted? A single **Ctrl+Z** removes the whole voice result.
+
+Unlike **Ask** and **Import** (which show an accept/reject ghost preview before
+adding anything), voice **direct-applies** on Run — the editable confirm box is
+its review gate — and the batch is one undo.
 
 Details worth knowing:
 - Transcription is fully **offline** (nerd-dictation / Vosk, English) — nothing

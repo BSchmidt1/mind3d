@@ -32,12 +32,15 @@ your existing Claude Code login — no keys are stored in this app.
 
 ## Voice mode
 
-Hold the 🎤 button and speak an instruction; on release, Claude turns it
-into new nodes/edges and applies them as one undoable change (`Ctrl+Z`
-undoes the whole result). New nodes attach near the selected node when one
-is selected, and its attached file (if any) is read and given to Claude as
-source material — e.g. select a node with a markdown file attached and say
-"map the main sections of the attached file".
+Hold the 🎤 button and speak an instruction; on release, an editable confirm
+box shows what was heard so you can fix a mis-hear before anything runs. Hit
+Run and Claude turns it into new nodes/edges and applies them as one undoable
+change (`Ctrl+Z` undoes the whole result); Cancel aborts without calling
+Claude. New nodes attach near the selected node when one is selected, and its
+attached file (if any) is read and given to Claude as source material — e.g.
+select a node with a markdown file attached and say "map the main sections of
+the attached file". (Voice direct-applies on Run; Ask/Import instead show an
+accept/reject preview.)
 
 Transcription is fully offline via [nerd-dictation](https://github.com/ideasman42/nerd-dictation)
 (Vosk); it must be installed and on `PATH` (or `~/.local/bin`). Turning
