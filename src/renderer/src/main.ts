@@ -11,6 +11,7 @@ import { CommandRegistry } from './core/commandRegistry';
 import { CommandPalette } from './ui/commandPalette';
 import { ProposalPanel } from './ui/proposalPanel';
 import { installAsk } from './ui/askController';
+import { installImport } from './ui/importController';
 
 export const store = new GraphStore();
 export const selection = new Selection();
@@ -307,3 +308,9 @@ new DetailPanel(document.getElementById('detail-panel')!, store, selection, () =
 // answer. Registers preset + free-text asks as Ctrl+K commands and wires the
 // #btn-ask primary.
 installAsk({ store, selection, view3d, proposalPanel, registry, session });
+
+// --- import → map (F5) ---
+// Paste text, load a file, or fetch a URL; Claude extracts a node/edge
+// structure, previewed via the shared proposal panel. Palette-only
+// (`import-map`) — no new top-bar button.
+installImport({ store, selection, view3d, proposalPanel, registry, session });

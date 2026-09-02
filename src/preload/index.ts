@@ -40,7 +40,8 @@ const api: Mind3dApi = {
     ipcRenderer.removeAllListeners('voice-error');
     ipcRenderer.on('voice-error', (_e, err: VoiceError) => cb(err));
   },
-  askClaude: (prompt, cwd) => ipcRenderer.invoke('claude-oneshot', prompt, cwd)
+  askClaude: (prompt, cwd) => ipcRenderer.invoke('claude-oneshot', prompt, cwd),
+  fetchUrl: (url) => ipcRenderer.invoke('url-fetch', url)
 };
 
 contextBridge.exposeInMainWorld('mind3d', api);

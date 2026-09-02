@@ -38,6 +38,7 @@ export interface Mind3dApi {
   onVoiceTranscript(cb: (t: VoiceTranscript) => void): void;
   onVoiceError(cb: (e: VoiceError) => void): void;
   askClaude(prompt: string, cwd: string): Promise<string>;
+  fetchUrl(url: string): Promise<string>;
 }
 
 declare global {

@@ -5,6 +5,64 @@ import type { BrowserWindow } from 'electron';
 
 const JSON_FILTER = [{ name: 'mind3d map', extensions: ['json'] }];
 
+// F5 URL import: bounds for the scheme-allowlisted main-process fetch. The
+// response is read through a byte-capped stream (a chunked reply without a
+// Content-Length header cannot blow memory), and an AbortController caps wall
+// time. No credentials are sent — plain http/https to the user-supplied URL.
+const URL_FETCH_MAX_BYTES = 512 * 1024;
+const URL_FETCH_TIMEOUT_MS = 15000;
+
+async function fetchUrlText(url: string): Promise<string> {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`url-fetch: invalid URL "${url}"`);
+  }
+  const proto = parsed.protocol;
+  if (proto !== 'http:' && proto !== 'https:') {
+    throw new Error(`url-fetch: scheme "${proto}" not allowed (only http/https)`);
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), URL_FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(parsed, {
+      signal: controller.signal,
+      redirect: 'follow',
+      headers: { accept: 'text/*, application/json, application/xhtml+xml, */*;q=0.1' }
+    });
+    if (!res.ok) throw new Error(`url-fetch: ${res.status} ${res.statusText}`);
+    const declared = res.headers.get('content-length');
+    if (declared !== null && Number(declared) > URL_FETCH_MAX_BYTES) {
+      throw new Error(`url-fetch: response too large (${declared} bytes > ${URL_FETCH_MAX_BYTES})`);
+    }
+    const body = res.body;
+    if (body === null) return '';
+    const reader = body.getReader();
+    const chunks: Buffer[] = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value === undefined) continue;
+      total += value.byteLength;
+      if (total > URL_FETCH_MAX_BYTES) {
+        await reader.cancel();
+        throw new Error(`url-fetch: response exceeded ${URL_FETCH_MAX_BYTES} bytes`);
+      }
+      chunks.push(Buffer.from(value));
+    }
+    return Buffer.concat(chunks).toString('utf8');
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(`url-fetch: timed out after ${URL_FETCH_TIMEOUT_MS} ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function rotateBackups(file: string): void {
   if (!fs.existsSync(file)) return;
   for (let i = 4; i >= 1; i--) {
@@ -70,4 +128,5 @@ export function registerPersistenceIpc(getWindow: () => BrowserWindow | null): v
     if (err) throw new Error(`openPath failed: ${err}`);
   });
   ipcMain.handle('path-dirname', (_e, p: string) => path.dirname(p));
+  ipcMain.handle('url-fetch', (_e, url: string) => fetchUrlText(url));
 }

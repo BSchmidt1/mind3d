@@ -126,3 +126,36 @@ body { margin: 0; background: #14181f; color: #dfe6ee; font: 13px/1.45 system-ui
   border-radius: 4px; padding: 4px 14px; cursor: pointer;
 }
 #ask-input .ask-actions .ask-go { background: #234b34; border-color: #5fd08a; color: #dfffe9; }
+
+/* Import → map modal (F5): paste/file/URL source over a dim backdrop. */
+#import-modal {
+  position: fixed; inset: 0; z-index: 160;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 8%; background: #0006;
+}
+#import-modal[hidden] { display: none; }
+#import-modal .import-card {
+  width: min(600px, 92vw); background: #1b212b; border: 1px solid #3a4656;
+  border-radius: 8px; padding: 14px 16px; box-shadow: 0 8px 40px #000a;
+}
+#import-modal .import-label { font-weight: 600; margin-bottom: 8px; color: #dfe6ee; }
+#import-modal .import-textarea {
+  width: 100%; box-sizing: border-box; background: #10141a; color: #dfe6ee;
+  border: 1px solid #3a4656; border-radius: 4px; padding: 8px 10px; font: inherit;
+  resize: vertical; outline: none;
+}
+#import-modal .import-source-row {
+  display: flex; gap: 8px; margin-top: 10px; align-items: center;
+}
+#import-modal .import-url {
+  flex: 1; box-sizing: border-box; background: #10141a; color: #dfe6ee;
+  border: 1px solid #3a4656; border-radius: 4px; padding: 6px 10px; font: inherit;
+  outline: none;
+}
+#import-modal .import-source-row button,
+#import-modal .import-actions button {
+  background: #2a3340; color: #dfe6ee; border: 1px solid #3a4656;
+  border-radius: 4px; padding: 6px 12px; cursor: pointer; white-space: nowrap;
+}
+#import-modal .import-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+#import-modal .import-actions .import-go { background: #234b34; border-color: #5fd08a; color: #dfffe9; }
