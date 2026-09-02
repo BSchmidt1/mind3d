@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { ClaudeChunk, ClaudeExit, Mind3dApi } from '../shared/ipc';
+import type { ClaudeChunk, ClaudeExit, Mind3dApi, VoiceError, VoiceTranscript } from '../shared/ipc';
 
 const api: Mind3dApi = {
   openMap: () => ipcRenderer.invoke('map-open'),
@@ -27,7 +27,19 @@ const api: Mind3dApi = {
     ipcRenderer.removeAllListeners('save-requested');
     ipcRenderer.on('save-requested', () => cb());
   },
-  saveDone: () => ipcRenderer.send('save-done')
+  saveDone: () => ipcRenderer.send('save-done'),
+  voiceBegin: () => ipcRenderer.send('voice-begin'),
+  voiceEnd: () => ipcRenderer.send('voice-end'),
+  onVoiceTranscript: (cb) => {
+    // Single-subscriber semantics: last subscription wins.
+    ipcRenderer.removeAllListeners('voice-transcript');
+    ipcRenderer.on('voice-transcript', (_e, t: VoiceTranscript) => cb(t));
+  },
+  onVoiceError: (cb) => {
+    // Single-subscriber semantics: last subscription wins.
+    ipcRenderer.removeAllListeners('voice-error');
+    ipcRenderer.on('voice-error', (_e, err: VoiceError) => cb(err));
+  }
 };
 
 contextBridge.exposeInMainWorld('mind3d', api);

@@ -10,6 +10,14 @@ export interface ClaudeExit {
   killed: boolean;
 }
 
+export interface VoiceTranscript {
+  text: string;
+}
+
+export interface VoiceError {
+  message: string;
+}
+
 export interface Mind3dApi {
   openMap(): Promise<{ path: string; json: string } | null>;
   saveMap(path: string | null, json: string): Promise<string | null>;
@@ -25,6 +33,10 @@ export interface Mind3dApi {
   onClaudeExit(cb: (e: ClaudeExit) => void): void;
   onSaveRequested(cb: () => void): void;
   saveDone(): void;
+  voiceBegin(): void;
+  voiceEnd(): void;
+  onVoiceTranscript(cb: (t: VoiceTranscript) => void): void;
+  onVoiceError(cb: (e: VoiceError) => void): void;
 }
 
 declare global {
