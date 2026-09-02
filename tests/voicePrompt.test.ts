@@ -13,6 +13,8 @@ describe('buildVoicePrompt', () => {
     expect(prompt).toContain('(empty map)');
     expect(prompt).toContain('(none)');
     expect(prompt).not.toContain('SOURCE DOCUMENT');
+    // transcript is fenced between delimiters so dictated text can't blur prompt structure
+    expect(prompt).toMatch(/<<<INSTRUCTION\nadd three children under the selected node\nINSTRUCTION>>>/);
   });
 
   test('includes each existing label and the selected id', () => {

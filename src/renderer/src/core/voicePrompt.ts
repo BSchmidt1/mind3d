@@ -36,6 +36,8 @@ export function buildVoicePrompt(opts: {
   }
   lines.push('');
   lines.push('USER INSTRUCTION:');
+  lines.push('<<<INSTRUCTION');
   lines.push(opts.transcript);
+  lines.push('INSTRUCTION>>>');
   return lines.join('\n');
 }

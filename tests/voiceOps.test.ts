@@ -148,6 +148,11 @@ describe('planFromVoiceResult', () => {
     expect(plan.rootId).toBe(plan.newNodeIds[1]);
   });
 
+  test('empty ops (no nodes, no edges) throws /nothing to create/', () => {
+    const result: VoiceResult = { ops: [], summary: 'x' };
+    expect(() => planFromVoiceResult(result, new Set())).toThrow(/nothing to create/);
+  });
+
   test('rootId is null when there are no node ops', () => {
     const store = new GraphStore();
     const existing = createNode('Existing');

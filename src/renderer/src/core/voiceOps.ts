@@ -117,6 +117,10 @@ export function planFromVoiceResult(
   const nodeOps = result.ops.filter((o): o is VoiceNodeOp => o.op === 'node');
   const edgeOps = result.ops.filter((o): o is VoiceEdgeOp => o.op === 'edge');
 
+  if (nodeOps.length === 0 && edgeOps.length === 0) {
+    throw new Error('voice: nothing to create (no operations)');
+  }
+
   const tmpToId = new Map<string, string>();
   const newNodeIds: string[] = [];
   const addNodeCmds: Command[] = [];
