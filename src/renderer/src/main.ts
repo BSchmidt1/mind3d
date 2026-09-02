@@ -9,6 +9,7 @@ import { VoicePanel } from './ui/voicePanel';
 import { initNotify, notify } from './ui/notify';
 import { CommandRegistry } from './core/commandRegistry';
 import { CommandPalette } from './ui/commandPalette';
+import { ProposalPanel } from './ui/proposalPanel';
 
 export const store = new GraphStore();
 export const selection = new Selection();
@@ -40,6 +41,7 @@ document.body.innerHTML = `
     <div id="detail-panel"></div>
   </div>
   <div id="toast-host"></div>
+  <div id="proposal-panel" hidden></div>
 `;
 
 initNotify(document.getElementById('toast-host')!);
@@ -65,6 +67,24 @@ export const view3d = new View3D(
   selection,
   (m) => notify.info(m)
 );
+
+// --- proposal preview (F3b) ---
+// Shared accept/reject preview + 3D ghost, reused by Ask (F4), Import (F5),
+// and Voice (F6). Mounted on a body-level card (never inside #view3d, which
+// 3d-force-graph wipes). Only Accept mutates the store — as one composite,
+// so the whole batch is a single undo.
+export const proposalPanel = new ProposalPanel(
+  document.getElementById('proposal-panel')!,
+  store,
+  selection,
+  view3d
+);
+registry.register({
+  id: 'dismiss-proposal',
+  title: 'Dismiss proposal',
+  run: () => proposalPanel.dismiss(),
+  when: () => !proposalPanel.hidden
+});
 
 // --- empty-state onboarding hint ---
 // Appended *after* View3D takes over #view3d: 3d-force-graph clears the

@@ -80,3 +80,25 @@ body { margin: 0; background: #14181f; color: #dfe6ee; font: 13px/1.45 system-ui
 .cmd-row .cmd-title { overflow: hidden; text-overflow: ellipsis; }
 .cmd-row.active, .cmd-row:hover { background: #2c3a4d; }
 .cmd-hint { color: #8fa1b8; flex-shrink: 0; }
+
+#proposal-panel {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  width: min(420px, 90vw); max-height: 60vh; overflow-y: auto;
+  background: #1b212b; border: 1px solid #3a4656; border-radius: 8px;
+  padding: 12px 16px; z-index: 120; box-shadow: 0 8px 40px #000a;
+}
+#proposal-panel[hidden] { display: none; }
+.proposal-summary { font-weight: 600; margin-bottom: 8px; }
+.proposal-answer { margin-bottom: 8px; }
+.proposal-ops { list-style: none; margin: 8px 0; padding: 0; }
+.proposal-ops li {
+  color: #b7c3d2; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px;
+  padding: 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.proposal-actions { display: flex; gap: 8px; margin-top: 10px; }
+.proposal-actions button {
+  background: #2a3340; color: #dfe6ee; border: 1px solid #3a4656;
+  border-radius: 4px; padding: 4px 14px; cursor: pointer;
+}
+.proposal-actions .proposal-accept { background: #234b34; border-color: #5fd08a; color: #dfffe9; }
+.proposal-actions .proposal-reject { background: #3a2630; border-color: #e05a5a; }

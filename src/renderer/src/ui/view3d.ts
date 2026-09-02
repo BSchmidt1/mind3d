@@ -17,16 +17,29 @@ interface SimNode {
   fx?: number;
   fy?: number;
   fz?: number;
+  ghost?: boolean;
+}
+
+// A translucent preview of a proposal's adds (F3b), rendered in the same force
+// graph as the real nodes but NOT committed to the GraphStore. Only Accept
+// mutates the store; the ghost lives entirely in View3D's sim arrays.
+export interface GhostData {
+  nodes: { id: string; label: string }[];
+  links: { source: string; target: string }[];
+  anchorId: string | null;
 }
 
 const MOVE_STEP = 8;
 const DIM_OPACITY = 0.12;
+const GHOST_OPACITY = 0.5;
+const GHOST_ACCENT = '#ffd54a';
 
 export class View3D {
   // 3d-force-graph has no useful public types; this is the documented `any` boundary.
   private graph: any;
   private simNodes: SimNode[] = [];
-  private simLinks: { id: string; source: string; target: string }[] = [];
+  private simLinks: { id: string; source: string; target: string; ghost?: boolean }[] = [];
+  private ghost: GhostData | null = null;
   private hoverNodeId: string | null = null;
   private linkMode = false;
   private focusMode = false;
@@ -54,6 +67,7 @@ export class View3D {
       .linkDirectionalArrowLength(4)
       .linkDirectionalArrowRelPos(1)
       .linkOpacity(0.35)
+      .linkColor((l: { ghost?: boolean }) => (l.ghost ? GHOST_ACCENT : '#5b6b80'))
       .nodeThreeObject((n: SimNode) => this.makeSprite(n))
       .onNodeClick((n: SimNode) => this.handleNodeClick(n.id))
       .onNodeHover((n: SimNode | null) => {
@@ -109,6 +123,22 @@ export class View3D {
   }
 
   private makeSprite(n: SimNode): THREE.Object3D {
+    if (n.ghost) {
+      // Ghost nodes are not in the store yet — their label comes from the
+      // pending proposal. Rendered translucent with an accent border so the
+      // preview reads as "not yet real".
+      const g = this.ghost?.nodes.find((gn) => gn.id === n.id);
+      if (!g) throw new Error(`ghost sprite for unknown ghost node "${n.id}"`);
+      const sprite = new SpriteText(g.label === '' ? '·' : g.label);
+      sprite.textHeight = 6;
+      sprite.color = '#dfe6ee';
+      sprite.borderColor = GHOST_ACCENT;
+      sprite.borderWidth = 0.6;
+      const mat = sprite.material as THREE.Material;
+      mat.opacity = GHOST_OPACITY;
+      mat.transparent = true;
+      return sprite;
+    }
     const m = this.store.state.nodes.get(n.id);
     if (!m) throw new Error(`sprite for unknown node "${n.id}"`);
     const sprite = new SpriteText(m.label === '' ? '·' : m.label);
@@ -144,8 +174,52 @@ export class View3D {
       source: e.source,
       target: e.target
     }));
+    if (this.ghost) this.appendGhost(this.ghost);
     this.recomputeFocus();
     this.graph.graphData({ nodes: this.simNodes, links: this.simLinks });
+  }
+
+  // Append the proposal preview's nodes/links to the freshly-built real sim
+  // arrays. Ghost nodes are seeded into `pendingSpawn` (once, near the anchor's
+  // live position — same offset math as spawnNear) so their placement is stable
+  // across rebuilds while the preview is up. The seed persists until Accept
+  // (spawnNear re-seeds the now-real ids) or clearGhost (which prunes it).
+  private appendGhost(ghost: GhostData): void {
+    const anchor = ghost.anchorId !== null ? this.simNodes.find((n) => n.id === ghost.anchorId) : undefined;
+    const base = anchor
+      ? { x: anchor.x ?? 0, y: anchor.y ?? 0, z: anchor.z ?? 0 }
+      : { x: 0, y: 0, z: 0 };
+    for (const g of ghost.nodes) {
+      if (!this.pendingSpawn.has(g.id)) {
+        this.pendingSpawn.set(g.id, {
+          x: base.x + 20 * (Math.random() - 0.5),
+          y: base.y + 20 * (Math.random() - 0.5),
+          z: base.z + 20 * (Math.random() - 0.5)
+        });
+      }
+      const p = this.pendingSpawn.get(g.id)!;
+      this.simNodes.push({ id: g.id, ghost: true, x: p.x, y: p.y, z: p.z });
+    }
+    ghost.links.forEach((l, i) => {
+      this.simLinks.push({ id: `ghost:${i}`, source: l.source, target: l.target, ghost: true });
+    });
+  }
+
+  // Show a translucent preview of a proposal's adds. Does NOT touch the store.
+  showGhost(g: GhostData): void {
+    this.ghost = g;
+    this.rebuild();
+  }
+
+  // Remove the preview and prune its pending-spawn seeds (so a rejected
+  // proposal leaves nothing behind, and an accepted one gets fresh placement
+  // from the caller's spawnNear for the now-real ids).
+  clearGhost(): void {
+    if (this.ghost) {
+      for (const g of this.ghost.nodes) this.pendingSpawn.delete(g.id);
+    }
+    this.ghost = null;
+    this.rebuild();
   }
 
   private syncProps(ids: string[]): void {
