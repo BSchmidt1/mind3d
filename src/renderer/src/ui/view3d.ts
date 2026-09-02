@@ -307,14 +307,20 @@ export class View3D {
       const prev = old.get(m.id);
       const spawn = this.pendingSpawn.get(m.id);
       this.pendingSpawn.delete(m.id);
+      // 2D mode: keep every node on the z=0 plane on a structure rebuild too,
+      // so a map pinned in 3D and then toggled to 2D stays flat when a later
+      // structure event (add/delete) rebuilds. Mirrors the syncProps clamp
+      // exactly (same condition, z→0 and a pinned fz→0). The store keeps the
+      // original 3D fz, so toggling back to 3D restores the 3D pin unchanged.
+      const twoD = this.dimsValue === 2;
       return {
         id: m.id,
         x: spawn?.x ?? prev?.x,
         y: spawn?.y ?? prev?.y,
-        z: spawn?.z ?? prev?.z,
+        z: twoD ? 0 : (spawn?.z ?? prev?.z),
         fx: m.fx ?? undefined,
         fy: m.fy ?? undefined,
-        fz: m.fz ?? undefined
+        fz: twoD ? (m.fz !== null ? 0 : undefined) : (m.fz ?? undefined)
       };
     });
     this.simLinks = [...this.store.state.edges.values()].map((e) => ({

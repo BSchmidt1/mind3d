@@ -90,7 +90,8 @@ export const view3d = new View3D(
 // no mutation and no OS access, so it is inert under the renderer sandbox.
 (window as unknown as { __mind3d?: unknown }).__mind3d = {
   camera: () => view3d.getCamera(),
-  dims: () => view3d.dims()
+  dims: () => view3d.dims(),
+  positions: () => Object.fromEntries(view3d.livePositions())
 };
 
 // --- proposal preview (F3b) ---

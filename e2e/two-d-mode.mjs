@@ -263,6 +263,70 @@ async function main() {
     await screenshot(page, 'f12-d-failure.png');
   }
 
+  // --- G: 2D STRUCTURE rebuild keeps 3D-pinned nodes on the z=0 plane ---
+  // Completes item 1: syncProps clamps z/fz in 2D for PROPS events; this proves
+  // the matching clamp in View3D.rebuild() for STRUCTURE events. Flow: in 3D,
+  // create a node and push it off the plane in depth (Shift+Up commits a
+  // non-zero fz); toggle to 2D; a structure event (Tab → addChild → rebuild)
+  // must flatten EVERY node to z≈0. Then back to 3D + one more structure event
+  // must RESTORE the node's original depth (the store kept its fz — 3D
+  // untouched). Uses the read-only __mind3d.positions seam.
+  const maxAbsZ = () =>
+    page.evaluate(() => {
+      const p = window.__mind3d?.positions?.() ?? {};
+      let m = 0;
+      for (const v of Object.values(p)) m = Math.max(m, Math.abs(v.z));
+      return m;
+    });
+  try {
+    await blurActive(page);
+    if ((await page.evaluate(() => window.__mind3d?.dims?.())) !== 3) {
+      await page.click('#btn-2d');
+      await page.waitForFunction(() => document.getElementById('btn-2d')?.classList.contains('active') === false, { timeout: 4000 });
+    }
+    // Create N1 (auto-selected, pinned) off-centre; dismiss its label editor.
+    const box = await page.locator('#view3d').boundingBox();
+    await page.mouse.dblclick(Math.round(box.x + box.width * 0.4), Math.round(box.y + box.height * 0.4));
+    await page.keyboard.press('Escape');
+    await blurActive(page);
+    // Push N1 in depth (3D forward ≈ ±Z) → a non-zero committed fz.
+    for (let i = 0; i < 4; i++) await page.keyboard.press('Shift+ArrowUp');
+    await page.waitForTimeout(80);
+    const offPlane = await maxAbsZ();
+    if (!(offPlane > 5)) throw new Error(`expected an off-plane 3D-pinned node (max|z|>5), got ${offPlane.toFixed(2)}`);
+    // Toggle to 2D (no rebuild yet), then fire a STRUCTURE event: Tab addChild.
+    await blurActive(page);
+    await page.click('#btn-2d');
+    await page.waitForFunction(() => document.getElementById('btn-2d')?.classList.contains('active') === true, { timeout: 4000 });
+    await blurActive(page);
+    await page.keyboard.press('Tab'); // addChild(selected) → composite structure event → rebuild() in 2D
+    await page.keyboard.press('Escape');
+    await blurActive(page);
+    await page.waitForTimeout(80);
+    const flat = await maxAbsZ();
+    if (!(flat < 1)) throw new Error(`2D structure rebuild left a node off-plane: max|z|=${flat.toFixed(2)} (expected <1)`);
+    // Back to 3D + one more structure event → N1's original fz restored.
+    await page.click('#btn-2d');
+    await page.waitForFunction(() => document.getElementById('btn-2d')?.classList.contains('active') === false, { timeout: 4000 });
+    await blurActive(page);
+    await page.keyboard.press('Tab'); // structure event → rebuild() in 3D reads the store's untouched fz
+    await page.keyboard.press('Escape');
+    await blurActive(page);
+    await page.waitForTimeout(80);
+    const restored = await maxAbsZ();
+    if (!(restored > 5)) throw new Error(`back in 3D the pinned depth was not restored: max|z|=${restored.toFixed(2)} (expected >5)`);
+    if (!noErrors()) throw new Error('renderer errors during 2D/3D rebuild clamp checks');
+    await screenshot(page, 'f12-g-rebuild-clamp.png');
+    record(
+      'G (2D rebuild clamp)',
+      'PASS',
+      `3D off-plane max|z|=${offPlane.toFixed(1)} → 2D structure rebuild flattened to max|z|=${flat.toFixed(2)} → back in 3D restored to max|z|=${restored.toFixed(1)} (store fz untouched)`
+    );
+  } catch (err) {
+    record('G (2D rebuild clamp)', 'FAIL', err.message);
+    await screenshot(page, 'f12-g-failure.png');
+  }
+
   await screenshot(page, 'f12-final.png');
   const exit = results.some((r) => r.status === 'FAIL') || pageErrors.length > 0 ? 1 : 0;
   await finish(electronApp, electronPid, exit);
