@@ -5,6 +5,7 @@ import { fuzzyScore } from './core/fuzzy';
 import { OutlinePanel } from './ui/outlinePanel';
 import { DetailPanel } from './ui/detailPanel';
 import { MapSession } from './mapSession';
+import { VoicePanel } from './ui/voicePanel';
 
 export const store = new GraphStore();
 export const selection = new Selection();
@@ -25,6 +26,7 @@ document.body.innerHTML = `
     <button id="btn-new">New</button>
     <button id="btn-open">Open</button>
     <button id="btn-save">Save</button>
+    <button id="btn-voice" title="hold to speak">🎤</button>
     <input id="search" placeholder="search… (fly-to)" />
     <div id="search-results" hidden></div>
     <span id="status"></span>
@@ -105,6 +107,20 @@ document.getElementById('topbar')!.insertBefore(fileStateEl, statusEl);
 export const session = new MapSession(store, (label) => {
   fileStateEl.textContent = label;
 });
+
+// --- voice mode (push-to-talk) ---
+const voicePanel = new VoicePanel(store, selection, view3d, session, setStatus);
+const voiceBtn = document.getElementById('btn-voice')!;
+function stopVoiceListening(): void {
+  voicePanel.end();
+  voiceBtn.classList.remove('active');
+}
+voiceBtn.addEventListener('mousedown', () => {
+  voiceBtn.classList.add('active');
+  voicePanel.begin();
+});
+voiceBtn.addEventListener('mouseup', stopVoiceListening);
+voiceBtn.addEventListener('mouseleave', stopVoiceListening);
 
 function guard(fn: () => void | Promise<void>): void {
   void (async (): Promise<void> => {

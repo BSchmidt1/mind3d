@@ -30,4 +30,19 @@ The Run button spawns `claude -p "<prompt>" --output-format text` with
 cwd = attached file's directory (else the map's directory). It inherits
 your existing Claude Code login — no keys are stored in this app.
 
+## Voice mode
+
+Hold the 🎤 button and speak an instruction; on release, Claude turns it
+into new nodes/edges and applies them as one undoable change (`Ctrl+Z`
+undoes the whole result). New nodes attach near the selected node when one
+is selected, and its attached file (if any) is read and given to Claude as
+source material — e.g. select a node with a markdown file attached and say
+"map the main sections of the attached file".
+
+Transcription is fully offline via [nerd-dictation](https://github.com/ideasman42/nerd-dictation)
+(Vosk); it must be installed and on `PATH` (or `~/.local/bin`). Turning
+the transcript into nodes runs a one-shot `claude -p` and inherits your
+existing Claude Code login, same as the per-node runner above — no keys
+are stored in this app.
+
 Press `?` in the app for all shortcuts.

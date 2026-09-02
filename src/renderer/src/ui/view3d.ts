@@ -369,6 +369,24 @@ export class View3D {
     };
   }
 
+  // Public: seed pendingSpawn for voice-created nodes so the next rebuild
+  // places them near the anchor node's live sim position (or origin if
+  // there's no anchor / it's not in the current simulation) instead of at
+  // the origin. Reuses the same mechanism dblclick/addChild rely on.
+  spawnNear(ids: string[], anchorId: string | null): void {
+    const anchor = anchorId !== null ? this.simNodes.find((n) => n.id === anchorId) : undefined;
+    const base = anchor
+      ? { x: anchor.x ?? 0, y: anchor.y ?? 0, z: anchor.z ?? 0 }
+      : { x: 0, y: 0, z: 0 };
+    for (const id of ids) {
+      this.pendingSpawn.set(id, {
+        x: base.x + 20 * (Math.random() - 0.5),
+        y: base.y + 20 * (Math.random() - 0.5),
+        z: base.z + 20 * (Math.random() - 0.5)
+      });
+    }
+  }
+
   flyTo(id: string): void {
     const sim = this.simNodes.find((n) => n.id === id);
     if (!sim) throw new Error(`flyTo: node "${id}" not in simulation`);
