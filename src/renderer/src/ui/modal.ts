@@ -51,6 +51,15 @@ export interface ConfirmModalOptions {
 // time (it closes any other modal on open, and any later modal closes it).
 export function confirmModal(message: string, opts?: ConfirmModalOptions): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
+    // Re-entrancy guard: closeOtherModals below EXCLUDES this id, so a confirm
+    // already on screen would survive and make the registerModal call throw
+    // `duplicate modal id "app-modal"`. Settle the prior confirm (cancel →
+    // false) and drop its registration first, so this call cleanly REPLACES it
+    // rather than throwing (which, on the snapshot-restore await, would surface
+    // as an unhandled rejection). Not reachable in the current wiring, but this
+    // is a shared primitive future code will reuse.
+    const prior = openers.get(CONFIRM_MODAL_ID);
+    if (prior) prior();
     closeOtherModals(CONFIRM_MODAL_ID);
 
     const root = document.createElement('div');
