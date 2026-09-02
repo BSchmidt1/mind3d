@@ -2,6 +2,7 @@ import type { GraphStore } from './core/store';
 import { deserializeGraph, serializeGraph, type MapMeta } from './core/serialize';
 import { emptyState } from './core/model';
 import { createSnapshot, snapshotToState, type Snapshot } from './core/snapshot';
+import type { Tour, Viewpoint } from './core/viewpoint';
 
 export class MapSession {
   private path: string | null = null;
@@ -11,6 +12,17 @@ export class MapSession {
   // Named checkpoints (F8), map metadata like MapMeta: held here, serialized
   // with the file, NOT command-tracked. Restoring one clears history (like Open).
   private snapshots: Snapshot[] = [];
+  // Named camera poses + ordered tours (F9). Same status as snapshots: map
+  // metadata, serialized with the file, not command-tracked.
+  private viewpoints: Viewpoint[] = [];
+  private tours: Tour[] = [];
+
+  // The extras block written on every save/recovery. Centralized so the three
+  // serialize call sites (autosave, quit-save, manual save) stay in sync as the
+  // optional set grows.
+  private extras(): { snapshots: Snapshot[]; viewpoints: Viewpoint[]; tours: Tour[] } {
+    return { snapshots: this.snapshots, viewpoints: this.viewpoints, tours: this.tours };
+  }
 
   constructor(
     private store: GraphStore,
@@ -27,7 +39,7 @@ export class MapSession {
             if (this.path !== null && this.dirty) {
               await this.save();
             } else if (this.path === null && this.dirty) {
-              const json = serializeGraph(this.store.state, this.meta, { snapshots: this.snapshots });
+              const json = serializeGraph(this.store.state, this.meta, this.extras());
               await window.mind3d.saveRecovery(json);
               this.onState('(unsaved — recovery written)');
             }
@@ -47,7 +59,7 @@ export class MapSession {
           if (this.path !== null && this.dirty) {
             await this.save();
           } else if (this.path === null && this.dirty) {
-            const json = serializeGraph(this.store.state, this.meta, { snapshots: this.snapshots });
+            const json = serializeGraph(this.store.state, this.meta, this.extras());
             await window.mind3d.saveRecovery(json);
           }
         } catch (err) {
@@ -75,6 +87,8 @@ export class MapSession {
     this.path = null;
     this.meta = this.freshMeta();
     this.snapshots = [];
+    this.viewpoints = [];
+    this.tours = [];
     this.store.loadState(emptyState());
     this.dirty = false;
     this.report();
@@ -85,11 +99,14 @@ export class MapSession {
     const res = await window.mind3d.openMap();
     if (res === null) return;
     // deserializeGraph accepts v1 or v2 and throws with a precise message on a
-    // bad file; a v1 file (no snapshots) upgrades in memory to snapshots: [].
-    const { state, meta, snapshots } = deserializeGraph(res.json);
+    // bad file. Missing optional sections upgrade in memory to []: a v1 file has
+    // none of them; an F8-era v2 file has snapshots but no viewpoints/tours.
+    const { state, meta, snapshots, viewpoints, tours } = deserializeGraph(res.json);
     this.path = res.path;
     this.meta = meta;
     this.snapshots = snapshots;
+    this.viewpoints = viewpoints;
+    this.tours = tours;
     this.store.loadState(state);
     this.dirty = false;
     this.report();
@@ -102,7 +119,7 @@ export class MapSession {
     }
     this.meta.modifiedAt = new Date().toISOString();
     if (this.path !== null) this.meta.name = this.path.replace(/^.*\//, '').replace(/\.json$/, '');
-    const json = serializeGraph(this.store.state, this.meta, { snapshots: this.snapshots });
+    const json = serializeGraph(this.store.state, this.meta, this.extras());
     const saved = await window.mind3d.saveMap(this.path, json);
     if (saved === null) return; // user cancelled save-as
     this.path = saved;
@@ -141,5 +158,40 @@ export class MapSession {
     // structure event drives the dirty flag + autosave via the store subscriber.
     this.store.loadState(snapshotToState(snap));
     this.report();
+  }
+
+  // --- viewpoints + tours (F9) ---
+  // Named camera poses and ordered tours, persisted with the map. Adding one
+  // marks the session dirty so the next save (manual, autosave, quit) writes it.
+  // The controller builds the Viewpoint/Tour (it owns View3D + selection); the
+  // session validates the shape and holds the list. Neither is command-tracked.
+
+  addViewpoint(vp: Viewpoint): void {
+    if (vp.name.trim() === '') throw new Error('viewpoint name must not be empty');
+    this.viewpoints.push(vp);
+    this.dirty = true;
+    this.report();
+  }
+
+  listViewpoints(): Viewpoint[] {
+    return [...this.viewpoints];
+  }
+
+  getViewpoint(id: string): Viewpoint {
+    const vp = this.viewpoints.find((v) => v.id === id);
+    if (!vp) throw new Error(`getViewpoint: no such viewpoint "${id}"`);
+    return vp;
+  }
+
+  addTour(tour: Tour): void {
+    if (tour.name.trim() === '') throw new Error('tour name must not be empty');
+    if (tour.stops.length === 0) throw new Error('tour must have at least one stop');
+    this.tours.push(tour);
+    this.dirty = true;
+    this.report();
+  }
+
+  listTours(): Tour[] {
+    return [...this.tours];
   }
 }

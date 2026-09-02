@@ -10,6 +10,7 @@ import { createEdge, createNode } from '../core/model';
 import type { GraphState } from '../core/model';
 import { nHopNeighborhood } from '../core/neighborhood';
 import type { GraphDiff } from '../core/snapshot';
+import type { Vec3 } from '../core/viewpoint';
 
 interface SimNode {
   id: string;
@@ -535,6 +536,23 @@ export class View3D {
       pos,
       800
     );
+  }
+
+  // Camera capture/apply for viewpoints + tours (F9). getCamera() reads the
+  // live pose (the perspective camera's world position + the orbit controls'
+  // look-at target); applyCamera animates to a saved pose via the same
+  // cameraPosition() mechanism flyTo uses.
+  getCamera(): { position: Vec3; target: Vec3 } {
+    const cam = this.graph.camera() as THREE.PerspectiveCamera;
+    const target = this.graph.controls().target as THREE.Vector3;
+    return {
+      position: { x: cam.position.x, y: cam.position.y, z: cam.position.z },
+      target: { x: target.x, y: target.y, z: target.z }
+    };
+  }
+
+  applyCamera(vp: { position: Vec3; target: Vec3 }, ms?: number): void {
+    this.graph.cameraPosition(vp.position, vp.target, ms ?? 800);
   }
 
   toggleFocusMode(): void {

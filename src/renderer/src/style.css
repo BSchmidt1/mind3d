@@ -235,3 +235,95 @@ body { margin: 0; background: #14181f; color: #dfe6ee; font: 13px/1.45 system-ui
   background: #2a3340; color: #dfe6ee; border: 1px solid #3a4656;
   border-radius: 4px; padding: 4px 14px; cursor: pointer;
 }
+
+/* Viewpoints + tours (F9): name prompt, pickers, and the tour builder. Reuses
+   the F8 overlay language (dark card, dim backdrop) via shared .overlay-* classes. */
+.overlay-prompt, .overlay-picker {
+  position: fixed; inset: 0; z-index: 160;
+  display: flex; align-items: flex-start; justify-content: center;
+  background: #0006; outline: none;
+}
+.overlay-prompt { padding-top: 14%; }
+.overlay-picker { padding-top: 10%; }
+.overlay-prompt[hidden], .overlay-picker[hidden] { display: none; }
+
+.overlay-prompt .name-card {
+  width: min(460px, 90vw); background: #1b212b; border: 1px solid #3a4656;
+  border-radius: 8px; padding: 14px 16px; box-shadow: 0 8px 40px #000a;
+}
+.overlay-prompt .name-label { font-weight: 600; margin-bottom: 8px; color: #dfe6ee; }
+.overlay-prompt .name-input {
+  width: 100%; box-sizing: border-box; background: #10141a; color: #dfe6ee;
+  border: 1px solid #3a4656; border-radius: 4px; padding: 8px 10px; font: inherit; outline: none;
+}
+.overlay-prompt .name-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.overlay-prompt .name-actions button {
+  background: #2a3340; color: #dfe6ee; border: 1px solid #3a4656;
+  border-radius: 4px; padding: 4px 14px; cursor: pointer;
+}
+.overlay-prompt .name-actions .name-go { background: #234b34; border-color: #5fd08a; color: #dfffe9; }
+
+.overlay-picker .picker-card {
+  width: min(520px, 90vw); max-height: 70vh; display: flex; flex-direction: column;
+  background: #1b212b; border: 1px solid #3a4656; border-radius: 8px;
+  padding: 14px 16px; box-shadow: 0 8px 40px #000a;
+}
+.overlay-picker .picker-title { font-weight: 600; margin-bottom: 8px; color: #dfe6ee; }
+.overlay-picker .picker-list { overflow-y: auto; }
+.overlay-picker .picker-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 8px 10px; border: 1px solid #2a3340; border-radius: 4px; margin-bottom: 6px;
+  cursor: pointer; background: #10141a;
+}
+.overlay-picker .picker-row:hover { border-color: #5b6b80; background: #17202b; }
+.overlay-picker .picker-name { color: #dfe6ee; font-weight: 500; }
+.overlay-picker .picker-when { color: #8fa1b8; font-size: 12px; white-space: nowrap; }
+.overlay-picker .picker-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
+.overlay-picker .picker-actions button {
+  background: #2a3340; color: #dfe6ee; border: 1px solid #3a4656;
+  border-radius: 4px; padding: 4px 14px; cursor: pointer;
+}
+
+/* Tour builder: name + two columns (available stops / chosen order). */
+#tour-builder {
+  position: fixed; inset: 0; z-index: 160;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 8%; background: #0006; outline: none;
+}
+#tour-builder[hidden] { display: none; }
+#tour-builder .tour-card {
+  width: min(640px, 92vw); max-height: 78vh; display: flex; flex-direction: column;
+  background: #1b212b; border: 1px solid #3a4656; border-radius: 8px;
+  padding: 14px 16px; box-shadow: 0 8px 40px #000a;
+}
+#tour-builder .tour-title { font-weight: 600; margin-bottom: 8px; color: #dfe6ee; }
+#tour-builder .tour-name {
+  width: 100%; box-sizing: border-box; background: #10141a; color: #dfe6ee;
+  border: 1px solid #3a4656; border-radius: 4px; padding: 8px 10px; font: inherit; outline: none;
+  margin-bottom: 10px;
+}
+#tour-builder .tour-cols { display: flex; gap: 12px; min-height: 0; overflow: hidden; }
+#tour-builder .tour-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#tour-builder .tour-col-label { color: #8fa1b8; font-size: 12px; margin-bottom: 6px; }
+#tour-builder .tour-avail, #tour-builder .tour-chosen { overflow-y: auto; max-height: 46vh; }
+#tour-builder .tour-chip {
+  display: block; width: 100%; text-align: left; margin-bottom: 6px;
+  background: #10141a; color: #dfe6ee; border: 1px solid #2a3340; border-radius: 4px;
+  padding: 6px 10px; cursor: pointer;
+}
+#tour-builder .tour-chip:hover { border-color: #5b6b80; background: #17202b; }
+#tour-builder .tour-empty { color: #6a7a8c; font-size: 12px; padding: 6px 2px; }
+#tour-builder .tour-stop-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  padding: 6px 10px; border: 1px solid #2a3340; border-radius: 4px; margin-bottom: 6px;
+  background: #10141a; color: #dfe6ee;
+}
+#tour-builder .tour-stop-del {
+  background: none; border: none; color: #e05a5a; cursor: pointer; font-size: 13px; padding: 0 4px;
+}
+#tour-builder .tour-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+#tour-builder .tour-actions button {
+  background: #2a3340; color: #dfe6ee; border: 1px solid #3a4656;
+  border-radius: 4px; padding: 4px 14px; cursor: pointer;
+}
+#tour-builder .tour-actions .tour-create { background: #234b34; border-color: #5fd08a; color: #dfffe9; }

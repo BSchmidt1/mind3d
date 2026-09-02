@@ -1,13 +1,16 @@
 import type { GraphState, MindEdge, MindNode } from './model';
 import { emptyState } from './model';
 import type { Snapshot } from './snapshot';
+import type { Tour, TourStop, Vec3, Viewpoint } from './viewpoint';
 
 // v2 (bumped from v1 in F8): required { version, meta, nodes, edges } plus an
 // OPTIONAL set that later tasks extend (F8 snapshots; F9 viewpoints/tours; F12
-// mode). An absent optional section loads as its default (snapshots → []), so a
-// v1 file — which has none of them — upgrades in memory with zero data loss.
-// A present-but-malformed optional value still throws (fail-fast). Both v1 and
-// v2 are accepted; any other version is rejected.
+// mode). An absent optional section loads as its default (snapshots/viewpoints/
+// tours → []), so a v1 file — which has none of them — and an F8-era v2 file
+// (snapshots but no viewpoints/tours) both upgrade in memory with zero data
+// loss. A present-but-malformed optional value still throws (fail-fast). Both
+// v1 and v2 are accepted; any other version is rejected. F9 adds no numeric
+// version bump — it only extends the optional set.
 export const FILE_VERSION = 2;
 export const SUPPORTED_VERSIONS = new Set([1, 2]);
 
@@ -20,7 +23,7 @@ export interface MapMeta {
 export function serializeGraph(
   state: GraphState,
   meta: MapMeta,
-  extras?: { snapshots?: Snapshot[] }
+  extras?: { snapshots?: Snapshot[]; viewpoints?: Viewpoint[]; tours?: Tour[] }
 ): string {
   return JSON.stringify(
     {
@@ -28,7 +31,9 @@ export function serializeGraph(
       meta,
       nodes: [...state.nodes.values()],
       edges: [...state.edges.values()],
-      snapshots: extras?.snapshots ?? []
+      snapshots: extras?.snapshots ?? [],
+      viewpoints: extras?.viewpoints ?? [],
+      tours: extras?.tours ?? []
     },
     null,
     2
@@ -64,6 +69,11 @@ function numOrNull(v: unknown, ctx: string): number | null {
   return v;
 }
 
+function num(v: unknown, ctx: string): number {
+  if (typeof v !== 'number' || !Number.isFinite(v)) throw new Error(`${ctx}: expected finite number`);
+  return v;
+}
+
 const NODE_KEYS = new Set([
   'id', 'label', 'notes', 'color', 'tags', 'fx', 'fy', 'fz',
   'attachedFile', 'claudePrompt', 'claudeResult'
@@ -73,9 +83,13 @@ const META_KEYS = new Set(['name', 'createdAt', 'modifiedAt']);
 // The v2 top level: required keys always present; optional keys default when
 // absent. Later tasks push into TOP_OPTIONAL (F9 viewpoints/tours, F12 mode).
 const TOP_REQUIRED = new Set(['version', 'meta', 'nodes', 'edges']);
-const TOP_OPTIONAL = new Set(['snapshots']);
+const TOP_OPTIONAL = new Set(['snapshots', 'viewpoints', 'tours']);
 const SNAPSHOT_KEYS = new Set(['id', 'name', 'createdAt', 'nodes', 'edges']);
 const RESULT_KEYS = new Set(['text', 'timestamp']);
+const VEC3_KEYS = new Set(['x', 'y', 'z']);
+const VIEWPOINT_KEYS = new Set(['id', 'name', 'position', 'target']);
+const TOUR_KEYS = new Set(['id', 'name', 'stops']);
+const TOUR_STOP_KEYS = new Set(['kind', 'ref']);
 
 function parseNode(v: unknown, ctx: string): MindNode {
   if (!isObj(v)) throw new Error(`${ctx}: expected object`);
@@ -157,6 +171,67 @@ function parseSnapshot(v: unknown, ctx: string): Snapshot {
   return { id, name, createdAt, nodes, edges };
 }
 
+function parseVec3(v: unknown, ctx: string): Vec3 {
+  if (!isObj(v)) throw new Error(`${ctx}: expected object`);
+  checkKeys(v, VEC3_KEYS, ctx);
+  return {
+    x: num(v['x'], `${ctx}.x`),
+    y: num(v['y'], `${ctx}.y`),
+    z: num(v['z'], `${ctx}.z`)
+  };
+}
+
+// A saved camera pose (F9). Position + look-at target, each a finite Vec3.
+function parseViewpoint(v: unknown, ctx: string): Viewpoint {
+  if (!isObj(v)) throw new Error(`${ctx}: expected object`);
+  const id = str(v['id'], `${ctx}.id`);
+  const c = `${ctx} (id="${id}")`;
+  checkKeys(v, VIEWPOINT_KEYS, c);
+  return {
+    id,
+    name: str(v['name'], `${c}.name`),
+    position: parseVec3(v['position'], `${c}.position`),
+    target: parseVec3(v['target'], `${c}.target`)
+  };
+}
+
+function parseTourStop(v: unknown, ctx: string): TourStop {
+  if (!isObj(v)) throw new Error(`${ctx}: expected object`);
+  checkKeys(v, TOUR_STOP_KEYS, ctx);
+  const kind = str(v['kind'], `${ctx}.kind`);
+  if (kind !== 'viewpoint' && kind !== 'node') {
+    throw new Error(`${ctx}.kind: expected "viewpoint" or "node", got "${kind}"`);
+  }
+  return { kind, ref: str(v['ref'], `${ctx}.ref`) };
+}
+
+// An ordered list of stops (F9). Stop refs are NOT validated against the live
+// graph/viewpoint set here — a stop can outlive its target; the tour player
+// skips a dangling ref at play time (fail-soft on playback, fail-fast on shape).
+function parseTour(v: unknown, ctx: string): Tour {
+  if (!isObj(v)) throw new Error(`${ctx}: expected object`);
+  const id = str(v['id'], `${ctx}.id`);
+  const c = `${ctx} (id="${id}")`;
+  checkKeys(v, TOUR_KEYS, c);
+  const name = str(v['name'], `${c}.name`);
+  if (!Array.isArray(v['stops'])) throw new Error(`${c}: "stops" must be an array`);
+  const stops = v['stops'].map((s, i) => parseTourStop(s, `${c}.stops[${i}]`));
+  return { id, name, stops };
+}
+
+// Parse a present optional array section, or default to [] when absent. A
+// present-but-not-an-array value is a hard error (fail-fast).
+function optionalArray<T>(
+  doc: Record<string, unknown>,
+  key: string,
+  parseItem: (v: unknown, ctx: string) => T
+): T[] {
+  if (!(key in doc)) return [];
+  const raw = doc[key];
+  if (!Array.isArray(raw)) throw new Error(`mind3d file: "${key}" must be an array`);
+  return raw.map((item, i) => parseItem(item, `${key}[${i}]`));
+}
+
 // Top-level key check: reject anything outside required∪optional; require every
 // required key. Optional keys may be absent (they default in deserializeGraph).
 function checkTopKeys(obj: Record<string, unknown>): void {
@@ -170,7 +245,13 @@ function checkTopKeys(obj: Record<string, unknown>): void {
   }
 }
 
-export function deserializeGraph(text: string): { state: GraphState; meta: MapMeta; snapshots: Snapshot[] } {
+export function deserializeGraph(text: string): {
+  state: GraphState;
+  meta: MapMeta;
+  snapshots: Snapshot[];
+  viewpoints: Viewpoint[];
+  tours: Tour[];
+} {
   let doc: unknown;
   try {
     doc = JSON.parse(text);
@@ -204,14 +285,11 @@ export function deserializeGraph(text: string): { state: GraphState; meta: MapMe
     if (state.edges.has(edge.id)) throw new Error(`edges[${i}]: duplicate edge id "${edge.id}"`);
     state.edges.set(edge.id, edge);
   });
-  // Optional in v2, absent in v1 → the in-memory upgrade default (empty list).
-  // Present-but-not-an-array is a hard error (fail-fast); each snapshot is
-  // validated strictly.
-  let snapshots: Snapshot[] = [];
-  if ('snapshots' in doc) {
-    const raw = doc['snapshots'];
-    if (!Array.isArray(raw)) throw new Error('mind3d file: "snapshots" must be an array');
-    snapshots = raw.map((s, i) => parseSnapshot(s, `snapshots[${i}]`));
-  }
-  return { state, meta, snapshots };
+  // Optional sections: absent in v1 (and viewpoints/tours absent in F8-era v2)
+  // → the in-memory upgrade default (empty list). Present-but-not-an-array is a
+  // hard error (fail-fast); every item is validated strictly.
+  const snapshots = optionalArray(doc, 'snapshots', parseSnapshot);
+  const viewpoints = optionalArray(doc, 'viewpoints', parseViewpoint);
+  const tours = optionalArray(doc, 'tours', parseTour);
+  return { state, meta, snapshots, viewpoints, tours };
 }

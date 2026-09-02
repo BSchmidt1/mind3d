@@ -14,6 +14,7 @@ import { ProposalPanel } from './ui/proposalPanel';
 import { installAsk } from './ui/askController';
 import { installImport } from './ui/importController';
 import { installSnapshots } from './ui/snapshotController';
+import { installTours } from './ui/tourController';
 
 export const store = new GraphStore();
 export const selection = new Selection();
@@ -293,7 +294,7 @@ p                pin/unpin         e          edit label
 Delete           delete node       f          fly to selection
 x                focus mode        Ctrl+Z/Shift+Z  undo/redo
 Ctrl+S/O         save/open         ?          this help
-Ctrl+K           command palette
+Ctrl+K           command palette   ] / [      tour next / prev
 outline: Enter sibling · Tab indent · Shift+Tab outdent · dblclick rename
   </pre>`;
 document.body.appendChild(help);
@@ -331,3 +332,9 @@ installImport({ store, selection, view3d, proposalPanel, registry, session });
 // -compare / -restore, diff-clear); the diff renders through View3D.showDiff,
 // never as DOM inside #view3d.
 installSnapshots({ store, view3d, registry, session });
+
+// --- camera viewpoints + tours (F9) ---
+// Save named camera poses with the map and assemble ordered tours (viewpoints +
+// nodes) walked with ] / [. Palette-only (viewpoint-save/-goto, tour-create/
+// -play/-next/-prev/-stop); camera capture/apply lives in View3D.
+installTours({ store, selection, view3d, registry, session });
