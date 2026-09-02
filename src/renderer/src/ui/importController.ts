@@ -36,7 +36,7 @@ export function installImport(deps: ImportDeps): void {
     // would become a silent unhandled rejection. The catch guards on `p` being
     // set before reporting on it, falling back to a plain error toast.
     let p: ProgressHandle | undefined;
-    // Fetch raw then parse (rather than the askClaudeForOps one-liner) so a
+    // Fetch the raw reply, then parse it separately (not in one call) so a
     // malformed reply can be logged verbatim — same pattern as Ask/Voice.
     let raw: string | undefined;
     try {

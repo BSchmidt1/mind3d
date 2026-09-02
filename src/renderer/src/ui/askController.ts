@@ -35,7 +35,7 @@ export function installAsk(deps: AskDeps): void {
     // rather than becoming a silent unhandled rejection — the caller is a
     // fire-and-forget `void runAsk(...)`.
     const p = notify.progress('info', '🧠 asking the map…');
-    // Fetch raw then parse (rather than the askClaudeForOps one-liner) so a
+    // Fetch the raw reply, then parse it separately (not in one call) so a
     // malformed reply can be logged verbatim for debugging — same pattern as
     // the voice flow.
     let raw: string | undefined;
@@ -99,9 +99,10 @@ export function installAsk(deps: AskDeps): void {
   }
 }
 
-// A minimal free-text entry overlay (mounted on document.body). The full F14
-// modal does not exist yet, so this self-contained box handles the ask prompt:
-// Ctrl/Cmd+Enter or the Ask button submits, Escape / backdrop click cancels.
+// A minimal free-text entry overlay (mounted on document.body). A small,
+// self-contained input box for the ask prompt (registered with the modal
+// coordinator like the other overlays): Ctrl/Cmd+Enter or the Ask button
+// submits, Escape / backdrop click cancels.
 class AskInput {
   private readonly root: HTMLDivElement;
   private readonly textarea: HTMLTextAreaElement;

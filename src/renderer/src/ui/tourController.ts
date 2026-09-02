@@ -33,10 +33,11 @@ export function installTours(deps: TourDeps): void {
   const tourPicker = new TourPicker();
   const builder = new TourBuilder();
 
-  // Active-tour state. A tour is "active" from tour-play until tour-stop (or a
-  // New/Open, which the store subscriber below detects via a shrinking node
-  // set is not reliable — so we leave the active tour in place; its stops just
-  // resolve against the new map or get skipped). ] / [ step it while active.
+  // Active-tour state. A tour is "active" from tour-play until tour-stop. A
+  // New/Open does not clear it (there is no reliable signal for that here), so
+  // an active tour simply keeps playing against the new map — each stop either
+  // resolves or is skipped by applyStop's dangling-ref check. ] / [ step it
+  // while active.
   let activeTour: Tour | null = null;
   let activeIndex = 0;
 

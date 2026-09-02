@@ -12,6 +12,30 @@ const JSON_FILTER = [{ name: 'mind3d map', extensions: ['json'] }];
 const URL_FETCH_MAX_BYTES = 512 * 1024;
 const URL_FETCH_TIMEOUT_MS = 15000;
 
+// Strip an HTML page down to readable text so URL import gets the article body,
+// not <head>/boilerplate (the downstream IMPORT_TRUNCATE cap of 12000 chars
+// otherwise often cuts before any real content). Regex-based on purpose — a v1
+// best-effort: drop <script>/<style> blocks entirely, remove all remaining
+// tags, decode the handful of common entities, and collapse whitespace. This is
+// applied ONLY when the response looks like HTML (see fetchUrlText), so
+// plain-text / markdown sources pass through untouched.
+function htmlToText(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&#x27;/gi, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 async function fetchUrlText(url: string): Promise<string> {
   let parsed: URL;
   try {
@@ -37,6 +61,7 @@ async function fetchUrlText(url: string): Promise<string> {
       }
     });
     if (!res.ok) throw new Error(`url-fetch: ${res.status} ${res.statusText}`);
+    const contentType = res.headers.get('content-type') ?? '';
     const declared = res.headers.get('content-length');
     if (declared !== null && Number(declared) > URL_FETCH_MAX_BYTES) {
       throw new Error(`url-fetch: response too large (${declared} bytes > ${URL_FETCH_MAX_BYTES})`);
@@ -57,7 +82,16 @@ async function fetchUrlText(url: string): Promise<string> {
       }
       chunks.push(Buffer.from(value));
     }
-    return Buffer.concat(chunks).toString('utf8');
+    const raw = Buffer.concat(chunks).toString('utf8');
+    // Only strip when the response looks like HTML — by content-type, or by an
+    // <html>/<body> tag near the top — so plain text / markdown is returned
+    // verbatim (a tag-strip on prose would be a no-op anyway, but a stray "<"
+    // in markdown must not be mangled).
+    const looksHtml =
+      /text\/html/i.test(contentType) ||
+      /<html[\s>]/i.test(raw.slice(0, 2000)) ||
+      /<body[\s>]/i.test(raw.slice(0, 4000));
+    return looksHtml ? htmlToText(raw) : raw;
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
       throw new Error(`url-fetch: timed out after ${URL_FETCH_TIMEOUT_MS} ms`);

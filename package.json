@@ -9,7 +9,7 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "test": "vitest run",
-    "test:e2e": "node e2e/new-button.mjs",
+    "test:e2e": "node e2e/context-menu.mjs",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

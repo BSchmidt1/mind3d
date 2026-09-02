@@ -350,7 +350,15 @@ export class View3D {
       const p = this.pendingSpawn.get(g.id)!;
       this.simNodes.push({ id: g.id, ghost: true, x: p.x, y: p.y, z: p.z });
     }
+    // A ghost link can dangle if the real node it references is deleted/undone
+    // while the preview is up: handing 3d-force-graph a link with an endpoint
+    // that isn't in the node set makes d3-force-3d throw "node not found"
+    // (uncaught) and freezes the sim. Drop any ghost link whose source or
+    // target is absent from the real ∪ ghost node set built above (real links
+    // from the store are always consistent, so only ghost links need this).
+    const present = new Set(this.simNodes.map((n) => n.id));
     ghost.links.forEach((l, i) => {
+      if (!present.has(l.source) || !present.has(l.target)) return;
       this.simLinks.push({ id: `ghost:${i}`, source: l.source, target: l.target, ghost: true });
     });
   }
@@ -425,6 +433,13 @@ export class View3D {
         sim.x = m.fx;
         sim.y = m.fy ?? undefined;
         sim.z = m.fz ?? undefined;
+      }
+      // 2D mode: a node's persisted z/fz (e.g. pinned while in 3D, then toggled
+      // to 2D) must not push it off the z=0 plane. Clamp both the live z and the
+      // pin so a props event keeps the layout flat.
+      if (this.dimsValue === 2) {
+        sim.z = 0;
+        if (sim.fz !== undefined) sim.fz = 0;
       }
     }
     this.graph.refresh();
@@ -793,6 +808,18 @@ export class View3D {
     const sim = this.simNodes.find((n) => n.id === id);
     if (!sim) throw new Error(`flyTo: node "${id}" not in simulation`);
     const pos = { x: sim.x ?? 0, y: sim.y ?? 0, z: sim.z ?? 0 };
+    if (this.dimsValue === 2) {
+      // 2D: keep the top-down view. Place the camera straight above the target
+      // on +Z at the current zoom distance (a wide default if unset), looking
+      // down at (x, y, 0). The 3D placement below would drop the camera into
+      // the flat layout plane looking edge-on and, with rotation locked, the
+      // user could never recover — so it is 2D-only.
+      const cam = this.graph.camera() as THREE.PerspectiveCamera;
+      const target = this.graph.controls().target as THREE.Vector3;
+      const dist = cam.position.distanceTo(target) || 300;
+      this.graph.cameraPosition({ x: pos.x, y: pos.y, z: dist }, { x: pos.x, y: pos.y, z: 0 }, 800);
+      return;
+    }
     const dist = 120;
     const len = Math.hypot(pos.x, pos.y, pos.z) || 1;
     this.graph.cameraPosition(
@@ -816,6 +843,20 @@ export class View3D {
   }
 
   applyCamera(vp: { position: Vec3; target: Vec3 }, ms?: number): void {
+    if (this.dimsValue === 2) {
+      // In 2D a saved 3D pose would drop the camera into the flat layout plane
+      // looking edge-on (and rotation is locked). Honour only the pose's
+      // look-at XY, kept top-down at the current zoom distance.
+      const cam = this.graph.camera() as THREE.PerspectiveCamera;
+      const ctarget = this.graph.controls().target as THREE.Vector3;
+      const dist = cam.position.distanceTo(ctarget) || 300;
+      this.graph.cameraPosition(
+        { x: vp.target.x, y: vp.target.y, z: dist },
+        { x: vp.target.x, y: vp.target.y, z: 0 },
+        ms ?? 800
+      );
+      return;
+    }
     this.graph.cameraPosition(vp.position, vp.target, ms ?? 800);
   }
 
@@ -877,6 +918,10 @@ export class View3D {
   // "hide" mode — a single dim code path, per the plan). `null` clears the
   // filter. Composes with focus mode in makeSprite (either can dim a node).
   setDimFilter(visible: Set<string> | null, opacity: number = DIM_OPACITY): void {
+    // TagBar calls this (with null) on every store event; when there is no
+    // active filter (new and current both null) it is a pure no-op — skip the
+    // O(n) sprite regeneration graph.refresh() would otherwise do per edit.
+    if (visible === null && this.dimFilter === null) return;
     this.dimFilter = visible;
     this.dimFilterOpacity = opacity;
     this.graph.refresh();

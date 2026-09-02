@@ -4,6 +4,7 @@ import { emptyState } from './core/model';
 import { createSnapshot, snapshotToState, type Snapshot } from './core/snapshot';
 import type { Tour, Viewpoint } from './core/viewpoint';
 import { confirmModal } from './ui/modal';
+import { notify } from './ui/notify';
 
 export class MapSession {
   private path: string | null = null;
@@ -55,7 +56,7 @@ export class MapSession {
               this.onState('(unsaved — recovery written)');
             }
           } catch (err) {
-            this.onState(`ERROR: autosave failed: ${(err as Error).message}`);
+            notify.error(`autosave failed: ${(err as Error).message}`);
           }
         })();
       }, 2000);
@@ -74,7 +75,7 @@ export class MapSession {
             await window.mind3d.saveRecovery(json);
           }
         } catch (err) {
-          this.onState(`ERROR: quit-save failed: ${(err as Error).message}`);
+          notify.error(`quit-save failed: ${(err as Error).message}`);
         } finally {
           window.mind3d.saveDone();
         }

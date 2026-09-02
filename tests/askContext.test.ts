@@ -48,6 +48,27 @@ describe('serializeGraphContext', () => {
     expect(out).toContain('"relates to"');
   });
 
+  test('edge relation appears as [relation] when not none', () => {
+    const { state, a, b, c } = build();
+    // a->b already has label "relates to"; give it a relation too, and give the
+    // unlabelled b->c edge a relation to prove [relation] shows without a label.
+    for (const e of state.edges.values()) {
+      if (e.source === a && e.target === b) e.relation = 'supports';
+      if (e.source === b && e.target === c) e.relation = 'depends';
+    }
+    const out = serializeGraphContext(state, { scope: 'all' });
+    expect(out).toContain(`${a} -> ${b} [supports] "relates to"`);
+    expect(out).toContain(`${b} -> ${c} [depends]`);
+  });
+
+  test('an edge with relation none omits the bracket', () => {
+    const { state, b, c } = build();
+    // b->c is default relation 'none' and unlabelled — a bare arrow line.
+    const out = serializeGraphContext(state, { scope: 'all' });
+    expect(out).toContain(`${b} -> ${c}`);
+    expect(out).not.toContain('[none]');
+  });
+
   test('neighborhood hops:1 excludes a 2-hop node and marks focus', () => {
     const { state, a } = build();
     const out = serializeGraphContext(state, { scope: 'neighborhood', focusId: a, hops: 1 });

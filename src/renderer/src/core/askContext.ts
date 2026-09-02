@@ -79,11 +79,14 @@ export function serializeGraphContext(
   lines.push('EDGES:');
   for (const e of state.edges.values()) {
     if (!includeEdge(e, nodeIds)) continue;
-    lines.push(
-      e.label !== null && e.label !== ''
-        ? `${e.source} -> ${e.target} "${e.label}"`
-        : `${e.source} -> ${e.target}`
-    );
+    // Include the typed relation (F10) so Ask/Import can see existing
+    // supports/refutes/depends edges — the proposal schema asks Claude to emit
+    // relations, so it needs to know what is already there. Shape:
+    // `source -> target [relation] "label"`, each trailing part only when set.
+    const parts = [`${e.source} -> ${e.target}`];
+    if (e.relation !== 'none') parts.push(`[${e.relation}]`);
+    if (e.label !== null && e.label !== '') parts.push(`"${e.label}"`);
+    lines.push(parts.join(' '));
   }
 
   return lines.join('\n');

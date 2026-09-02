@@ -45,10 +45,13 @@ export interface ConfirmModalOptions {
   cancelLabel?: string;
 }
 
-// A styled confirm dialog. Resolves true on OK / Enter, false on Cancel /
-// Escape / scrim click. Focus is trapped between the two buttons (Tab cycles);
-// the overlay is removed from the DOM on settle. Only one is ever open at a
-// time (it closes any other modal on open, and any later modal closes it).
+// A styled confirm dialog. Resolves true on OK (click, or Enter while OK is
+// focused), false on Cancel / Escape / scrim click. Both current callers are
+// DESTRUCTIVE (discard map, restore snapshot), so CANCEL is focused by default
+// and Enter therefore does NOT confirm — the user must click OK or Tab to it
+// first. Focus is trapped between the two buttons (Tab cycles); the overlay is
+// removed from the DOM on settle. Only one is ever open at a time (it closes
+// any other modal on open, and any later modal closes it).
 export function confirmModal(message: string, opts?: ConfirmModalOptions): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     // Re-entrancy guard: closeOtherModals below EXCLUDES this id, so a confirm
@@ -109,7 +112,10 @@ export function confirmModal(message: string, opts?: ConfirmModalOptions): Promi
     root.addEventListener('keydown', (ev) => {
       if (ev.key === 'Enter') {
         ev.preventDefault();
-        settle(true);
+        // Enter activates the FOCUSED button, not OK unconditionally — so a
+        // destructive confirm (Cancel focused by default) is not confirmed by a
+        // stray Enter. Tabbing to OK (or clicking it) is required to confirm.
+        settle(document.activeElement === okBtn);
       } else if (ev.key === 'Escape') {
         ev.preventDefault();
         settle(false);
@@ -124,6 +130,8 @@ export function confirmModal(message: string, opts?: ConfirmModalOptions): Promi
     });
 
     document.body.appendChild(root);
-    okBtn.focus();
+    // Focus CANCEL by default: both callers are destructive, so the safe action
+    // is the default and Enter (which activates the focused button) cancels.
+    cancelBtn.focus();
   });
 }

@@ -183,6 +183,43 @@ async function main() {
     await screenshot(page, 'f12-e-failure.png');
   }
 
+  // --- F: fly-to in 2D keeps the camera TOP-DOWN (the v2fix real bug) ---
+  // Still in 2D with the node from B selected. Pressing 'f' calls View3D.flyTo,
+  // which in 2D must place the camera straight above the node on +Z looking at
+  // z=0 — NOT the 3D pos*(1+dist/len) placement, which drops the camera into the
+  // flat layout plane looking edge-on and, with rotation locked, traps the user.
+  // Asserted via the read-only __mind3d camera seam: after the fly the camera
+  // sits well above the plane (position.z large) and looks at z≈0. Under the
+  // pre-fix code position.z would be ~0 (edge-on) and this fails.
+  try {
+    await blurActive(page);
+    const dims2d = await page.evaluate(() => window.__mind3d?.dims?.());
+    if (dims2d !== 2) throw new Error(`expected 2D before fly-to, got dims=${dims2d}`);
+    await page.keyboard.press('f'); // flyTo the selected node
+    await withTimeout(
+      page.waitForFunction(
+        () => {
+          const c = window.__mind3d?.camera?.();
+          return !!c && c.position.z > 50 && Math.abs(c.target.z) < 1;
+        },
+        { timeout: 3000 }
+      ),
+      3500,
+      'camera top-down after 2D fly-to (F)'
+    );
+    const cam = await page.evaluate(() => window.__mind3d?.camera?.());
+    if (!noErrors()) throw new Error('renderer errors during 2D fly-to');
+    await screenshot(page, 'f12-f-flyto.png');
+    record(
+      'F (2D fly-to top-down)',
+      'PASS',
+      `after 'f' the camera is top-down: position.z=${cam.position.z.toFixed(1)} (>>0), target.z=${cam.target.z.toFixed(2)} (~0) — not edge-on`
+    );
+  } catch (err) {
+    record('F (2D fly-to top-down)', 'FAIL', err.message);
+    await screenshot(page, 'f12-f-failure.png');
+  }
+
   // --- C: `toggle-2d` palette command flips back to 3D ---
   try {
     await blurActive(page);

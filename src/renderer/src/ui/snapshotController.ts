@@ -107,9 +107,9 @@ export function installSnapshots(deps: SnapshotDeps): void {
   });
 }
 
-// A single-line name entry overlay (mounted on document.body). The full F14
-// modal does not exist yet; this self-contained box is the inline prompt the
-// plan calls for. Enter or Save submits, Escape / backdrop cancels.
+// A single-line name entry overlay (mounted on document.body): the inline
+// prompt the plan calls for, registered with the modal coordinator like the
+// other overlays. Enter or Save submits, Escape / backdrop cancels.
 class NamePrompt {
   private readonly root: HTMLDivElement;
   private readonly input: HTMLInputElement;

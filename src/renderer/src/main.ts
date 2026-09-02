@@ -84,6 +84,15 @@ export const view3d = new View3D(
   (m) => notify.info(m)
 );
 
+// Read-only e2e/debug seam. The live camera pose and layout dims are otherwise
+// module-scoped inside View3D and unreachable from the Playwright harness; this
+// exposes them so the 2D-mode smoke can assert the top-down camera. Read-only,
+// no mutation and no OS access, so it is inert under the renderer sandbox.
+(window as unknown as { __mind3d?: unknown }).__mind3d = {
+  camera: () => view3d.getCamera(),
+  dims: () => view3d.dims()
+};
+
 // --- proposal preview (F3b) ---
 // Shared accept/reject preview + 3D ghost, reused by Ask (F4), Import (F5),
 // and Voice (F6). Mounted on a body-level card (never inside #view3d, which
@@ -393,6 +402,10 @@ Delete           delete node       f          fly to selection
 x                focus mode        Ctrl+Z/Shift+Z  undo/redo
 Ctrl+S/O         save/open         ?          this help
 Ctrl+K           command palette   ] / [      tour next / prev
+right-click      context menu      #btn-2d    2D / 3D layout toggle
+tag chip         filter / colour by tag
+undo/redo buttons in the top bar (also Ctrl+Z / Shift+Z)
+Ctrl+K exposes:  Ask the map · Import text/file/URL · snapshots · viewpoints & tours
 outline: Enter sibling · Tab indent · Shift+Tab outdent · dblclick rename
   </pre>`;
 document.body.appendChild(help);
