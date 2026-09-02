@@ -632,6 +632,11 @@ export class View3D {
     if (key === 'ArrowRight') d = right.multiplyScalar(MOVE_STEP);
     if (key === 'ArrowUp') d = shift ? fwd.multiplyScalar(MOVE_STEP) : up.multiplyScalar(MOVE_STEP);
     if (key === 'ArrowDown') d = shift ? fwd.multiplyScalar(-MOVE_STEP) : up.multiplyScalar(-MOVE_STEP);
+    // In 2D mode the top-down camera's forward vector is world -Z, so a
+    // Shift+Up/Down depth nudge would push the node off the z=0 plane (committed
+    // by handleKeyUp's setPosition and persisted). Keep in-plane moves (±X/±Y)
+    // and make depth a no-op so the flat-layout guarantee holds.
+    if (this.dimsValue === 2) d.z = 0;
     if (!this.keyMoveActive) {
       this.keyMoveActive = true;
       this.keyMoveNodeId = id;

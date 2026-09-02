@@ -163,6 +163,26 @@ async function main() {
     await screenshot(page, 'f12-b-failure.png');
   }
 
+  // --- E: 2D depth-nudge (Shift+Up/Down) stays in-plane ---
+  // Still in 2D with the node from B selected. keyMove clamps d.z=0 in 2D so a
+  // Shift+Up/Down depth nudge is a no-op (in-plane ±X/±Y still move). The node's
+  // z is View3D-internal (not DOM-observable), so this asserts the clamped path
+  // runs error-free in the real renderer; z=0 itself is by construction (the
+  // d.z=0 clamp) + the setPosition/serialize round-trip persisting whatever is
+  // committed. Runs BEFORE C toggles back to 3D.
+  try {
+    await blurActive(page);
+    await page.keyboard.press('Shift+ArrowUp');
+    await page.keyboard.press('Shift+ArrowDown');
+    await page.keyboard.press('ArrowLeft');
+    await page.waitForTimeout(60);
+    if (!noErrors()) throw new Error('renderer errors during 2D depth/in-plane nudge');
+    record('E (2D depth nudge clamped)', 'PASS', 'Shift+Up/Down (depth) + Left (in-plane) ran in 2D with no renderer error; depth is a no-op via the d.z=0 clamp');
+  } catch (err) {
+    record('E (2D depth nudge clamped)', 'FAIL', err.message);
+    await screenshot(page, 'f12-e-failure.png');
+  }
+
   // --- C: `toggle-2d` palette command flips back to 3D ---
   try {
     await blurActive(page);
