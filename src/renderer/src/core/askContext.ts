@@ -10,6 +10,14 @@ export type AskScope = 'all' | 'selection' | 'neighborhood';
 
 const NOTES_EXCERPT = 80;
 
+// The 'all' scope serializes the whole graph, so cap the node count: a large
+// map dumped whole makes a huge, slow, costly Claude call that can blow the
+// context window. When over the cap we keep the first-N nodes by insertion
+// order (deterministic and cheap) and mark the context as partial. The
+// neighborhood/selection scopes are already bounded (by hops / incident
+// edges), so only 'all' needs this.
+export const ALL_SCOPE_NODE_CAP = 200;
+
 export function serializeGraphContext(
   state: GraphState,
   opts: { scope: AskScope; focusId?: string | null; hops?: number }
@@ -19,9 +27,16 @@ export function serializeGraphContext(
 
   let nodeIds: Set<string>;
   let hasFocus = false;
+  let truncation: { shown: number; total: number } | null = null;
 
   if (scope === 'all') {
-    nodeIds = new Set(state.nodes.keys());
+    const allIds = [...state.nodes.keys()];
+    if (allIds.length > ALL_SCOPE_NODE_CAP) {
+      nodeIds = new Set(allIds.slice(0, ALL_SCOPE_NODE_CAP));
+      truncation = { shown: ALL_SCOPE_NODE_CAP, total: allIds.length };
+    } else {
+      nodeIds = new Set(allIds);
+    }
   } else {
     // Both selection and neighborhood need a focus node — fail fast if absent.
     if (focusId === null) {
@@ -56,6 +71,9 @@ export function serializeGraphContext(
     } else {
       lines.push(`${id}\t${node.label}`);
     }
+  }
+  if (truncation !== null) {
+    lines.push(`… (${truncation.shown} of ${truncation.total} nodes shown)`);
   }
 
   lines.push('EDGES:');

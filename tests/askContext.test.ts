@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { serializeGraphContext } from '../src/renderer/src/core/askContext';
-import { createEdge, createNode, type GraphState } from '../src/renderer/src/core/model';
+import { ALL_SCOPE_NODE_CAP, serializeGraphContext } from '../src/renderer/src/core/askContext';
+import { createEdge, createNode, type GraphState, type MindNode } from '../src/renderer/src/core/model';
 
 function build(): { state: GraphState; a: string; b: string; c: string } {
   const na = createNode('Alpha');
@@ -62,6 +62,27 @@ describe('serializeGraphContext', () => {
     expect(() =>
       serializeGraphContext(state, { scope: 'neighborhood', focusId: null, hops: 2 })
     ).toThrow(/focus/);
+  });
+
+  test('all scope caps a large graph and marks the truncation', () => {
+    const nodes = new Map<string, MindNode>();
+    const total = ALL_SCOPE_NODE_CAP + 50;
+    for (let i = 0; i < total; i++) {
+      const n = createNode(`Node ${i}`);
+      nodes.set(n.id, n);
+    }
+    const state: GraphState = { nodes, edges: new Map() };
+    const out = serializeGraphContext(state, { scope: 'all' });
+    // Node lines are the tab-delimited ones; there should be exactly the cap.
+    const nodeLines = out.split('\n').filter((l) => l.includes('\t'));
+    expect(nodeLines.length).toBe(ALL_SCOPE_NODE_CAP);
+    expect(out).toContain(`${ALL_SCOPE_NODE_CAP} of ${total} nodes shown`);
+  });
+
+  test('all scope under the cap has no truncation marker', () => {
+    const { state } = build();
+    const out = serializeGraphContext(state, { scope: 'all' });
+    expect(out).not.toContain('nodes shown');
   });
 
   test('selection scope keeps the focus node and its incident edges', () => {

@@ -29,20 +29,24 @@ export function installAsk(deps: AskDeps): void {
   const { store, selection, proposalPanel, registry, session } = deps;
 
   async function runAsk(instruction: string): Promise<void> {
-    const focusId = selection.get();
-    // With a node selected we scope to its neighborhood (2 hops); otherwise
-    // the whole graph is fair game.
-    const scope: AskScope = focusId !== null ? 'neighborhood' : 'all';
-    const context = serializeGraphContext(store.state, { scope, focusId, hops: 2 });
-    const prompt = buildAskPrompt({ instruction, context });
-    const cwd = await session.getMapDir();
-
+    // Create the progress handle before any work so an early throw (context
+    // serialization, prompt build, getMapDir) still resolves it via the catch
+    // rather than becoming a silent unhandled rejection — the caller is a
+    // fire-and-forget `void runAsk(...)`.
     const p = notify.progress('info', '🧠 asking the map…');
     // Fetch raw then parse (rather than the askClaudeForOps one-liner) so a
     // malformed reply can be logged verbatim for debugging — same pattern as
     // the voice flow.
     let raw: string | undefined;
     try {
+      const focusId = selection.get();
+      // With a node selected we scope to its neighborhood (2 hops); otherwise
+      // the whole graph is fair game.
+      const scope: AskScope = focusId !== null ? 'neighborhood' : 'all';
+      const context = serializeGraphContext(store.state, { scope, focusId, hops: 2 });
+      const prompt = buildAskPrompt({ instruction, context });
+      const cwd = await session.getMapDir();
+
       raw = await window.mind3d.askClaude(prompt, cwd);
       const opSet = parseProposal(raw);
       if (opSet.ops.length === 0) {
@@ -52,13 +56,15 @@ export function installAsk(deps: AskDeps): void {
         proposalPanel.showAnswer(opSet.answer ?? '(no answer)');
         return;
       }
-      p.done('success', opSet.summary);
+      // Plan (and render) BEFORE the success toast, so a planProposal throw
+      // surfaces as an error rather than a success emitted for a failed plan.
       const proposal = planProposal(
         opSet,
         new Set(store.state.nodes.keys()),
         (id) => store.state.nodes.get(id)?.label ?? id
       );
       proposalPanel.show(proposal, { answer: opSet.answer });
+      p.done('success', opSet.summary);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       p.done('error', `ask ERROR: ${msg}`);
