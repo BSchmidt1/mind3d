@@ -1,5 +1,6 @@
 import { CommandRegistry, type PaletteCommand } from '../core/commandRegistry';
 import { notify } from './notify';
+import { closeOtherModals, registerModal } from './modal';
 
 export class CommandPalette {
   private readonly root: HTMLDivElement;
@@ -17,6 +18,7 @@ export class CommandPalette {
       <div class="cmd-list"></div>
     `;
     document.body.appendChild(this.root);
+    registerModal('cmd-palette', () => this.close());
     this.input = this.root.querySelector('#cmd-input')!;
     this.listEl = this.root.querySelector('.cmd-list')!;
 
@@ -57,6 +59,7 @@ export class CommandPalette {
   }
 
   open(): void {
+    closeOtherModals('cmd-palette');
     this.input.value = '';
     this.commands = this.registry.filter('');
     this.activeIndex = 0;

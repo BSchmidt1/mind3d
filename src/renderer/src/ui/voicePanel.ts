@@ -5,6 +5,7 @@ import type { MapSession } from '../mapSession';
 import { parseProposal, planProposal } from '../core/proposal';
 import { buildVoicePrompt } from '../core/voicePrompt';
 import { notify, type ProgressHandle } from './notify';
+import { closeOtherModals, registerModal } from './modal';
 
 const DOC_TRUNCATE = 6000;
 
@@ -56,6 +57,10 @@ export class VoicePanel {
         </div>
       </div>`;
     document.body.appendChild(this.confirmRoot);
+    // Register with the single-modal coordinator (F14): if another overlay opens
+    // while the confirm box is up, cancelConfirm runs (it clears inFlight and
+    // toasts "voice: cancelled"); it is a no-op when the box is already hidden.
+    registerModal('voice-confirm', () => this.cancelConfirm());
     this.confirmTextarea = this.confirmRoot.querySelector('.vc-textarea')!;
 
     this.confirmRoot.querySelector('.vc-cancel')!.addEventListener('click', () => this.cancelConfirm());
@@ -142,6 +147,7 @@ export class VoicePanel {
       this.inFlight = false;
       return;
     }
+    closeOtherModals('voice-confirm');
     this.confirmTextarea.value = transcript;
     this.confirmRoot.hidden = false;
     this.confirmTextarea.focus();

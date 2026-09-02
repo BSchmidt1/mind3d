@@ -5,6 +5,7 @@ import type { MapSession } from '../mapSession';
 import type { CommandRegistry } from '../core/commandRegistry';
 import { createTour, createViewpoint, stepTour, type Tour, type TourStop, type Viewpoint } from '../core/viewpoint';
 import { notify } from './notify';
+import { closeOtherModals, registerModal } from './modal';
 
 // Camera viewpoints + tours (F9). Registers Ctrl+K palette commands (the
 // anti-top-bar-bloat mechanism) rather than adding buttons:
@@ -222,6 +223,7 @@ class NamePrompt {
   constructor() {
     this.root = document.createElement('div');
     this.root.id = 'viewpoint-name-prompt';
+    registerModal('viewpoint-name-prompt', () => this.close());
     this.root.className = 'overlay-prompt';
     this.root.hidden = true;
     this.root.innerHTML = `
@@ -255,6 +257,7 @@ class NamePrompt {
   }
 
   open(label: string, placeholder: string, onSubmit: (name: string) => void): void {
+    closeOtherModals('viewpoint-name-prompt');
     this.label.textContent = label;
     this.input.placeholder = placeholder;
     this.onSubmit = onSubmit;
@@ -290,6 +293,7 @@ class ViewpointPicker {
   constructor() {
     this.root = document.createElement('div');
     this.root.id = 'viewpoint-picker';
+    registerModal('viewpoint-picker', () => this.close());
     this.root.className = 'overlay-picker';
     this.root.hidden = true;
     this.root.tabIndex = -1;
@@ -316,6 +320,7 @@ class ViewpointPicker {
   }
 
   open(title: string, vps: Viewpoint[], onPick: (vp: Viewpoint) => void): void {
+    closeOtherModals('viewpoint-picker');
     this.titleEl.textContent = title;
     this.listEl.innerHTML = '';
     // Newest first, matching the snapshot picker.
@@ -350,6 +355,7 @@ class TourPicker {
   constructor() {
     this.root = document.createElement('div');
     this.root.id = 'tour-picker';
+    registerModal('tour-picker', () => this.close());
     this.root.className = 'overlay-picker';
     this.root.hidden = true;
     this.root.tabIndex = -1;
@@ -376,6 +382,7 @@ class TourPicker {
   }
 
   open(title: string, tours: Tour[], onPick: (tour: Tour) => void): void {
+    closeOtherModals('tour-picker');
     this.titleEl.textContent = title;
     this.listEl.innerHTML = '';
     for (const tour of [...tours].reverse()) {
@@ -419,6 +426,7 @@ class TourBuilder {
   constructor() {
     this.root = document.createElement('div');
     this.root.id = 'tour-builder';
+    registerModal('tour-builder', () => this.close());
     this.root.hidden = true;
     this.root.tabIndex = -1;
     this.root.innerHTML = `
@@ -464,6 +472,7 @@ class TourBuilder {
     selNode: { id: string; label: string } | null,
     onCreate: (name: string, stops: TourStop[]) => void
   ): void {
+    closeOtherModals('tour-builder');
     this.onCreate = onCreate;
     this.stops = [];
     this.nameInput.value = '';

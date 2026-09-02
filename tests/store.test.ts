@@ -117,6 +117,27 @@ describe('GraphStore', () => {
     expect(events[1]!.ids).toEqual([n.id]);
   });
 
+  test('events carry command name and source across apply/undo/redo (F14)', () => {
+    const { store, ids } = storeWith(['a']);
+    const events: ChangeEvent[] = [];
+    store.subscribe((e) => events.push(e));
+    store.apply(setLabel(ids[0]!, 'b'));
+    store.undo();
+    store.redo();
+    expect(events.map((e) => e.source)).toEqual(['apply', 'undo', 'redo']);
+    expect(events.map((e) => e.name)).toEqual(['setLabel', 'setLabel', 'setLabel']);
+  });
+
+  test('loadState emits name "loadState" with source apply (F14)', () => {
+    const store = new GraphStore();
+    const events: ChangeEvent[] = [];
+    store.subscribe((e) => events.push(e));
+    store.loadState(emptyState());
+    expect(events[0]!.name).toBe('loadState');
+    expect(events[0]!.source).toBe('apply');
+    expect(events[0]!.kind).toBe('structure');
+  });
+
   test('loadState replaces state and clears history', () => {
     const { store } = storeWith(['a']);
     const fresh = emptyState();

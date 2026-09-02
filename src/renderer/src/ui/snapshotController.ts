@@ -4,6 +4,7 @@ import type { MapSession } from '../mapSession';
 import type { CommandRegistry } from '../core/commandRegistry';
 import { diffStates, snapshotToState, type GraphDiff, type Snapshot } from '../core/snapshot';
 import { notify } from './notify';
+import { confirmModal, closeOtherModals, registerModal } from './modal';
 
 // Snapshots + visual diff (F8). Registers Ctrl+K palette commands (the
 // anti-top-bar-bloat mechanism) rather than adding buttons:
@@ -79,14 +80,20 @@ export function installSnapshots(deps: SnapshotDeps): void {
         return;
       }
       picker.open('Restore snapshot (replaces current map)', snaps, (snap) => {
-        if (!confirm(`Restore "${snap.name}"? This replaces the current map and clears undo history.`)) return;
-        try {
-          view3d.clearDiff();
-          session.restoreSnapshot(snap.id);
-          notify.success(`restored snapshot "${snap.name}"`);
-        } catch (err) {
-          notify.error(`snapshot: ${(err as Error).message}`);
-        }
+        void (async (): Promise<void> => {
+          const ok = await confirmModal(
+            `Restore "${snap.name}"? This replaces the current map and clears undo history.`,
+            { okLabel: 'Restore', cancelLabel: 'Cancel' }
+          );
+          if (!ok) return;
+          try {
+            view3d.clearDiff();
+            session.restoreSnapshot(snap.id);
+            notify.success(`restored snapshot "${snap.name}"`);
+          } catch (err) {
+            notify.error(`snapshot: ${(err as Error).message}`);
+          }
+        })();
       });
     },
     when: () => session.listSnapshots().length > 0
@@ -123,6 +130,7 @@ class NamePrompt {
         </div>
       </div>`;
     document.body.appendChild(this.root);
+    registerModal('snapshot-name-prompt', () => this.close());
     this.input = this.root.querySelector('.name-input')!;
     this.label = this.root.querySelector('.name-label')!;
 
@@ -145,6 +153,7 @@ class NamePrompt {
   }
 
   open(label: string, onSubmit: (name: string) => void): void {
+    closeOtherModals('snapshot-name-prompt');
     this.label.textContent = label;
     this.onSubmit = onSubmit;
     this.input.value = '';
@@ -188,6 +197,7 @@ class SnapshotPicker {
         <div class="snapshot-actions"><button class="snapshot-cancel">Cancel</button></div>
       </div>`;
     document.body.appendChild(this.root);
+    registerModal('snapshot-picker', () => this.close());
     this.titleEl = this.root.querySelector('.snapshot-title')!;
     this.listEl = this.root.querySelector('.snapshot-list')!;
 
@@ -205,6 +215,7 @@ class SnapshotPicker {
   }
 
   open(title: string, snaps: Snapshot[], onPick: (snap: Snapshot) => void): void {
+    closeOtherModals('snapshot-picker');
     this.titleEl.textContent = title;
     this.listEl.innerHTML = '';
     // Newest first so the most recent checkpoint is at the top.

@@ -8,6 +8,7 @@ import { serializeGraphContext, type AskScope } from '../core/askContext';
 import { ASK_PRESETS, buildAskPrompt } from '../core/askPrompts';
 import { parseProposal, planProposal } from '../core/proposal';
 import { notify } from './notify';
+import { closeOtherModals, registerModal } from './modal';
 
 // "Ask the map" (F4): send the whole graph (or the selected node's N-hop
 // neighborhood) to Claude and surface the result through the F3b proposal
@@ -119,6 +120,7 @@ class AskInput {
         </div>
       </div>`;
     document.body.appendChild(this.root);
+    registerModal('ask-input', () => this.close());
     this.textarea = this.root.querySelector('.ask-textarea')!;
 
     this.root.querySelector('.ask-cancel')!.addEventListener('click', () => this.close());
@@ -141,6 +143,7 @@ class AskInput {
   }
 
   open(): void {
+    closeOtherModals('ask-input');
     this.textarea.value = '';
     this.root.hidden = false;
     this.textarea.focus();

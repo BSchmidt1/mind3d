@@ -42,6 +42,8 @@ document.body.innerHTML = `
     <button id="btn-new">New</button>
     <button id="btn-open">Open</button>
     <button id="btn-save">Save</button>
+    <button id="btn-undo" title="undo (Ctrl+Z)" disabled>↶</button>
+    <button id="btn-redo" title="redo (Ctrl+Shift+Z)" disabled>↷</button>
     <button id="btn-ask" title="ask Claude about this map">Ask</button>
     <button id="btn-voice" title="hold to speak">🎤</button>
     <button id="btn-2d" title="toggle 2D / 3D layout">2D</button>
@@ -156,7 +158,7 @@ searchEl.addEventListener('keydown', (ev) => {
   ev.stopPropagation();
 });
 
-// --- undo/redo ---
+// --- undo/redo (keyboard) ---
 window.addEventListener('keydown', (ev) => {
   if (!ev.ctrlKey || ev.key.toLowerCase() !== 'z') return;
   const el = document.activeElement;
@@ -164,6 +166,35 @@ window.addEventListener('keydown', (ev) => {
   ev.preventDefault();
   if (ev.shiftKey) store.redo();
   else store.undo();
+});
+
+// --- undo/redo buttons + change toasts (F14) ---
+// Visible undo/redo primaries mirroring Ctrl+Z / Ctrl+Shift+Z — they call the
+// SAME store.undo()/redo(). Their enabled state and the "Undid/Redid <name>"
+// toasts are both driven off store change events: undo()/redo() emit
+// source 'undo'/'redo' carrying the command's name (F14 ChangeEvent extension).
+// A normal apply (source 'apply', incl. loadState) gets no toast.
+const undoBtn = document.getElementById('btn-undo') as HTMLButtonElement;
+const redoBtn = document.getElementById('btn-redo') as HTMLButtonElement;
+function refreshUndoRedo(): void {
+  undoBtn.disabled = !store.canUndo;
+  redoBtn.disabled = !store.canRedo;
+}
+undoBtn.addEventListener('click', () => { store.undo(); });
+redoBtn.addEventListener('click', () => { store.redo(); });
+store.subscribe((ev) => {
+  refreshUndoRedo();
+  if (ev.source === 'undo') notify.info(`Undid: ${ev.name}`);
+  else if (ev.source === 'redo') notify.info(`Redid: ${ev.name}`);
+});
+refreshUndoRedo();
+registry.register({
+  id: 'undo', title: 'Undo', hint: 'Ctrl+Z',
+  run: () => { store.undo(); }, when: () => store.canUndo
+});
+registry.register({
+  id: 'redo', title: 'Redo', hint: 'Ctrl+Shift+Z',
+  run: () => { store.redo(); }, when: () => store.canRedo
 });
 
 new OutlinePanel(document.getElementById('outline-panel')!, store, selection);
@@ -204,8 +235,11 @@ function guard(fn: () => void | Promise<void>): void {
 }
 
 function doNewMap(): void {
-  guard(() => {
-    if (session.newMap()) {
+  guard(async () => {
+    // newMap() is async now: on a non-empty map it awaits the in-app confirm
+    // modal (F14) instead of the native, renderer-blocking confirm().
+    const made = await session.newMap();
+    if (made) {
       applyMode();
       notify.success('new map');
     } else {

@@ -7,6 +7,7 @@ import type { ProposalPanel } from './proposalPanel';
 import { buildImportPrompt } from '../core/importPrompt';
 import { parseProposal, planProposal } from '../core/proposal';
 import { notify, type ProgressHandle } from './notify';
+import { closeOtherModals, registerModal } from './modal';
 
 // Import text / file / URL → map (F5): paste text, load a file, or fetch a
 // URL, then let Claude extract a node/edge structure, surfaced through the
@@ -111,6 +112,7 @@ class ImportModal {
         </div>
       </div>`;
     document.body.appendChild(this.root);
+    registerModal('import-modal', () => this.close());
     this.textarea = this.root.querySelector('.import-textarea')!;
     this.urlInput = this.root.querySelector('.import-url')!;
 
@@ -150,6 +152,7 @@ class ImportModal {
   }
 
   open(): void {
+    closeOtherModals('import-modal');
     this.textarea.value = '';
     this.urlInput.value = '';
     this.root.hidden = false;

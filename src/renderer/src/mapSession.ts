@@ -3,6 +3,7 @@ import { deserializeGraph, serializeGraph, type MapMeta, type ViewMode } from '.
 import { emptyState } from './core/model';
 import { createSnapshot, snapshotToState, type Snapshot } from './core/snapshot';
 import type { Tour, Viewpoint } from './core/viewpoint';
+import { confirmModal } from './ui/modal';
 
 export class MapSession {
   private path: string | null = null;
@@ -92,8 +93,13 @@ export class MapSession {
     this.onState(`${file}${this.dirty ? ' *' : ''}`);
   }
 
-  newMap(): boolean {
-    if (this.store.state.nodes.size > 0 && !confirm('Discard current map?')) return false;
+  async newMap(): Promise<boolean> {
+    if (
+      this.store.state.nodes.size > 0 &&
+      !(await confirmModal('Discard current map?', { okLabel: 'Discard', cancelLabel: 'Keep' }))
+    ) {
+      return false;
+    }
     this.path = null;
     this.meta = this.freshMeta();
     this.snapshots = [];
