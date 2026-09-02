@@ -340,3 +340,47 @@ body { margin: 0; background: #14181f; color: #dfe6ee; font: 13px/1.45 system-ui
   border-radius: 4px; padding: 4px 14px; cursor: pointer;
 }
 #tour-builder .tour-actions .tour-create { background: #234b34; border-color: #5fd08a; color: #dfffe9; }
+
+/* Tag filter + color-by-tag (F11): a compact, non-modal floating panel docked
+   bottom-left so the graph stays visible while you toggle tags. Reuses the dark
+   card tokens. */
+#tag-bar {
+  position: fixed; bottom: 16px; left: 16px; z-index: 150;
+  width: min(320px, 90vw);
+}
+#tag-bar[hidden] { display: none; }
+#tag-bar .tag-card {
+  background: #1b212b; border: 1px solid #3a4656; border-radius: 6px;
+  padding: 10px; box-shadow: 0 8px 30px #000a;
+}
+#tag-bar .tag-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+#tag-bar .tag-title { font-weight: 600; color: #dfe6ee; }
+#tag-bar .tag-close {
+  background: none; border: none; color: #8fa1b8; font-size: 16px; line-height: 1;
+  cursor: pointer; padding: 0 4px;
+}
+#tag-bar .tag-close:hover { color: #dfe6ee; }
+#tag-bar .tag-chips { display: flex; flex-wrap: wrap; gap: 6px; max-height: 160px; overflow-y: auto; }
+#tag-bar .tag-empty { color: #6b7a8e; font-size: 12px; }
+#tag-bar .tag-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #10141a; color: #dfe6ee; border: 1px solid #3a4656; border-radius: 12px;
+  padding: 2px 10px; cursor: pointer; font-size: 12px;
+}
+#tag-bar .tag-chip:hover { border-color: #5b6b80; }
+#tag-bar .tag-chip.active { border-color: #6fb3ff; background: #1c2836; color: #eaf2ff; }
+#tag-bar .tag-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+#tag-bar .tag-name { white-space: nowrap; }
+#tag-bar .tag-controls {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-top: 10px; padding-top: 8px; border-top: 1px solid #2a3340; color: #8fa1b8;
+}
+#tag-bar .tag-mode, #tag-bar .tag-color { display: inline-flex; align-items: center; gap: 6px; }
+#tag-bar .tag-mode-select {
+  background: #10141a; color: #dfe6ee; border: 1px solid #3a4656; border-radius: 3px; padding: 2px 4px;
+}
+#tag-bar .tag-clear {
+  margin-left: auto; background: #2a3340; color: #dfe6ee; border: 1px solid #3a4656;
+  border-radius: 4px; padding: 3px 10px; cursor: pointer;
+}
+#tag-bar .tag-clear:hover { border-color: #5b6b80; }

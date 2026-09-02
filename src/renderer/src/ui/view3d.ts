@@ -84,6 +84,17 @@ export class View3D {
   private linkMode = false;
   private focusMode = false;
   private focusSet: Set<string> | null = null;
+  // Tag filter (F11): the "visible" set the filter keeps at full opacity; every
+  // node NOT in it is dimmed at `dimFilterOpacity` (DIM_OPACITY for "dim" mode,
+  // 0 for "hide" mode). Null = no filter. Independent of focusMode — a node is
+  // dimmed if EITHER excludes it (see makeSprite). Pure view state, never a
+  // graph mutation, so it does not go through the command store.
+  private dimFilter: Set<string> | null = null;
+  private dimFilterOpacity = DIM_OPACITY;
+  // Color-by-tag (F11): when set, a non-selected node's label takes
+  // colorOf(id) (its first tag's deterministic color) when that returns one,
+  // else falls back to the node's own color / default. Null = no override.
+  private colorByTag: ((nodeId: string) => string | null) | null = null;
   private keyMoveActive = false;
   private keyMoveNodeId: string | null = null;
   private pendingSpawn = new Map<string, { x: number; y: number; z: number }>();
@@ -270,14 +281,25 @@ export class View3D {
     sprite.textHeight = 6;
     const selected = this.selection.get() === n.id;
     // In a diff view, added/changed nodes take their diff tint (removed nodes
-    // are separate red ghosts). Otherwise selection highlight, then the node's
-    // own color, then the default.
+    // are separate red ghosts). Otherwise selection highlight wins, then the
+    // color-by-tag override (F11), then the node's own color, then the default.
     const diffColor = this.diffNodeColors?.get(n.id);
-    sprite.color = diffColor ?? (selected ? '#ffd54a' : (m.color ?? '#dfe6ee'));
+    const byTag = !selected && this.colorByTag ? this.colorByTag(n.id) : null;
+    sprite.color = diffColor ?? (selected ? '#ffd54a' : (byTag ?? m.color ?? '#dfe6ee'));
     if (m.fx !== null) sprite.borderColor = selected ? '#ffd54a' : '#5b6b80';
     if (m.fx !== null) sprite.borderWidth = 0.4;
     const mat = sprite.material as THREE.Material;
-    if (this.focusSet && !this.focusSet.has(n.id)) mat.opacity = DIM_OPACITY;
+    // Focus mode (F: neighborhood) and the tag filter (F11) can BOTH want to dim
+    // the same node. Treat them as independent reasons to dim — a node is dimmed
+    // if focus mode excludes it OR the tag filter excludes it — and when both
+    // apply take the stronger (lower) opacity so neither clobbers the other.
+    const focusDimmed = this.focusSet !== null && !this.focusSet.has(n.id);
+    const filterDimmed = this.dimFilter !== null && !this.dimFilter.has(n.id);
+    if (focusDimmed || filterDimmed) {
+      const focusOp = focusDimmed ? DIM_OPACITY : 1;
+      const filterOp = filterDimmed ? this.dimFilterOpacity : 1;
+      mat.opacity = Math.min(focusOp, filterOp);
+    }
     mat.transparent = true;
     return sprite;
   }
@@ -732,6 +754,24 @@ export class View3D {
     this.recomputeFocus();
     this.graph.refresh();
     this.onStatus(this.focusMode ? 'focus mode on' : 'focus mode off');
+  }
+
+  // Tag filter (F11). `visible` is the set of node ids to KEEP at full opacity;
+  // every other node is dimmed at `opacity` (DIM_OPACITY for "dim" mode, 0 for
+  // "hide" mode — a single dim code path, per the plan). `null` clears the
+  // filter. Composes with focus mode in makeSprite (either can dim a node).
+  setDimFilter(visible: Set<string> | null, opacity: number = DIM_OPACITY): void {
+    this.dimFilter = visible;
+    this.dimFilterOpacity = opacity;
+    this.graph.refresh();
+  }
+
+  // Color-by-tag (F11). `colorOf` returns a node's tag color (or null to fall
+  // back to its own color); `null` clears the override. refresh() repaints all
+  // sprites (nodeThreeObject re-runs per node).
+  setColorByTag(colorOf: ((nodeId: string) => string | null) | null): void {
+    this.colorByTag = colorOf;
+    this.graph.refresh();
   }
 
   pinnedCount(): number {

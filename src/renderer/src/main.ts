@@ -15,6 +15,8 @@ import { installAsk } from './ui/askController';
 import { installImport } from './ui/importController';
 import { installSnapshots } from './ui/snapshotController';
 import { installTours } from './ui/tourController';
+import { TagBar } from './ui/tagBar';
+import { collectTags } from './core/tags';
 
 export const store = new GraphStore();
 export const selection = new Selection();
@@ -368,3 +370,25 @@ installSnapshots({ store, view3d, registry, session });
 // nodes) walked with ] / [. Palette-only (viewpoint-save/-goto, tour-create/
 // -play/-next/-prev/-stop); camera capture/apply lives in View3D.
 installTours({ store, selection, view3d, registry, session });
+
+// --- tag filter + color-by-tag (F11) ---
+// Make the (previously write-only) node tags useful: a compact floating panel
+// that dims/hides nodes without an active tag and optionally colors nodes by
+// tag. Filter state is VIEW state (not in the map file, not command-tracked);
+// it composes with focus mode (View3D dims a node if either excludes it).
+// Palette-only (`tag-filter` opens the panel, `tag-color-toggle` flips colors) —
+// no new top-bar button.
+const tagBar = new TagBar(store, view3d);
+registry.register({
+  id: 'tag-filter',
+  title: 'Filter by tag…',
+  hint: 'dim / hide by tag',
+  run: () => tagBar.open(),
+  when: () => collectTags(store.state).length > 0
+});
+registry.register({
+  id: 'tag-color-toggle',
+  title: 'Toggle color by tag',
+  run: () => tagBar.toggleColor(),
+  when: () => collectTags(store.state).length > 0
+});
