@@ -29,7 +29,12 @@ async function fetchUrlText(url: string): Promise<string> {
     const res = await fetch(parsed, {
       signal: controller.signal,
       redirect: 'follow',
-      headers: { accept: 'text/*, application/json, application/xhtml+xml, */*;q=0.1' }
+      // A static UA (no identifying info) so UA-less requests don't spuriously
+      // 403; still no credentials/cookies/auth headers.
+      headers: {
+        accept: 'text/*, application/json, application/xhtml+xml, */*;q=0.1',
+        'user-agent': 'mind3d/0.1'
+      }
     });
     if (!res.ok) throw new Error(`url-fetch: ${res.status} ${res.statusText}`);
     const declared = res.headers.get('content-length');

@@ -5,6 +5,14 @@ import { spawn } from 'node:child_process';
 // so the shared proposal engine's Ask/Import/Voice callers all reuse one
 // channel). Same spawn shape as the per-node runner: argv-only prompt, no
 // stdin (ended immediately to skip the ~3s piped-input wait), env pass-through.
+//
+// Defense-in-depth: `--tools ""` disables ALL built-in tools for this spawn.
+// Every caller (Ask F4, Import F5, Voice F6) uses this purely for text→JSON
+// extraction and never needs a tool. Import routes third-party web/file text
+// into the prompt, so a prompt-injection in that content must not be able to
+// make Claude touch the filesystem or network — even on a machine where the
+// user has globally allowlisted tools or runs skip-permissions. Extraction is
+// unaffected (verified: the JSON pipeline still returns with tools off).
 export function registerClaudeOneshotIpc(): void {
   ipcMain.handle('claude-oneshot', async (_e, prompt: string, cwd: string): Promise<string> => {
     if (typeof prompt !== 'string' || prompt.trim() === '') {
@@ -14,7 +22,7 @@ export function registerClaudeOneshotIpc(): void {
       throw new Error('claude-oneshot: cwd must be a non-empty string');
     }
     return new Promise<string>((resolve, reject) => {
-      const child = spawn('claude', ['-p', prompt, '--output-format', 'text'], {
+      const child = spawn('claude', ['-p', prompt, '--output-format', 'text', '--tools', ''], {
         cwd,
         env: process.env
       });

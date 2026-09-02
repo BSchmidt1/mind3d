@@ -6,7 +6,7 @@ import type { CommandRegistry } from '../core/commandRegistry';
 import type { ProposalPanel } from './proposalPanel';
 import { buildImportPrompt } from '../core/importPrompt';
 import { parseProposal, planProposal } from '../core/proposal';
-import { notify } from './notify';
+import { notify, type ProgressHandle } from './notify';
 
 // Import text / file / URL → map (F5): paste text, load a file, or fetch a
 // URL, then let Claude extract a node/edge structure, surfaced through the
@@ -29,11 +29,17 @@ export function installImport(deps: ImportDeps): void {
   const { store, proposalPanel, registry, session } = deps;
 
   async function runImport(sourceText: string): Promise<void> {
-    const p = notify.progress('info', '📥 extracting a map…');
+    // The progress handle is created as the first step INSIDE the try so even
+    // its creation (and every pre-Claude step) is covered by the catch — the
+    // caller is a fire-and-forget `void runImport(...)`, so an uncaught throw
+    // would become a silent unhandled rejection. The catch guards on `p` being
+    // set before reporting on it, falling back to a plain error toast.
+    let p: ProgressHandle | undefined;
     // Fetch raw then parse (rather than the askClaudeForOps one-liner) so a
     // malformed reply can be logged verbatim — same pattern as Ask/Voice.
     let raw: string | undefined;
     try {
+      p = notify.progress('info', '📥 extracting a map…');
       const prompt = buildImportPrompt(sourceText);
       const cwd = await session.getMapDir();
       raw = await window.mind3d.askClaude(prompt, cwd);
@@ -56,7 +62,9 @@ export function installImport(deps: ImportDeps): void {
       p.done('success', opSet.summary);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      p.done('error', `import ERROR: ${msg}`);
+      // p may be undefined only if notify.progress itself threw (near-never).
+      if (p !== undefined) p.done('error', `import ERROR: ${msg}`);
+      else notify.error(`import ERROR: ${msg}`);
       if (raw !== undefined) console.error('import: raw claude output that failed to parse:\n', raw);
       else console.error('import: failed', err);
     }
