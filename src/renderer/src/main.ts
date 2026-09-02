@@ -116,8 +116,7 @@ function stopVoiceListening(): void {
   voiceBtn.classList.remove('active');
 }
 voiceBtn.addEventListener('mousedown', () => {
-  voiceBtn.classList.add('active');
-  voicePanel.begin();
+  if (voicePanel.begin()) voiceBtn.classList.add('active');
 });
 voiceBtn.addEventListener('mouseup', stopVoiceListening);
 voiceBtn.addEventListener('mouseleave', stopVoiceListening);

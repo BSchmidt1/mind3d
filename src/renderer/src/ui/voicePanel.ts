@@ -15,6 +15,12 @@ export class VoicePanel {
   // step — so a second mousedown can't begin a new session while a prior
   // transcript is still being processed.
   private inFlight = false;
+  // True only while a nerd-dictation session is physically open, i.e.
+  // between voiceBegin() and the transcript (or a voice-error) arriving.
+  // Kept distinct from inFlight so end() and handleVoiceError don't act on
+  // a session that has already closed but whose "thinking" step is still
+  // running — see begin()/end()/handleVoiceError below.
+  private listening = false;
 
   constructor(
     private store: GraphStore,
@@ -24,36 +30,51 @@ export class VoicePanel {
     private setStatus: (msg: string) => void
   ) {
     window.mind3d.onVoiceTranscript((t) => {
+      // The session is no longer physically open once its transcript
+      // arrives; inFlight stays true through the Claude/parse/plan/apply
+      // steps below and is cleared in runFlow's finally.
+      this.listening = false;
       void this.runFlow(t.text);
     });
     window.mind3d.onVoiceError((e) => this.handleVoiceError(e.message));
   }
 
-  begin(): void {
+  // Returns true iff a new listening session actually started (so callers
+  // can gate visual "active" feedback on a real begin, not a no-op).
+  begin(): boolean {
     if (this.inFlight) {
       this.setStatus('voice: still processing previous request…');
-      return;
+      return false;
     }
     this.inFlight = true;
+    this.listening = true;
     window.mind3d.voiceBegin();
     this.setStatus('🎤 listening…');
+    return true;
   }
 
   end(): void {
-    if (!this.inFlight) return;
+    // No session physically open (already delivered its transcript/error,
+    // or begin() no-op'd) — sending voice-end here would be spurious: main
+    // replies with "no voice session in progress", and that error must not
+    // be allowed to clobber a cycle that's still thinking or already done.
+    if (!this.listening) return;
+    this.listening = false;
     window.mind3d.voiceEnd();
   }
 
-  // A voice-error can arrive after a cycle already finished (e.g. a
-  // duplicate voice-end sent on mouseleave+mouseup racing the real one,
-  // whose failed handshake reports late) — ignore it then, since it would
-  // otherwise clobber a good result already shown in status. While a cycle
-  // is genuinely active (listening or thinking), surface it and reset.
+  // A voice-error can arrive after the listening session already closed
+  // (e.g. a duplicate voice-end sent on mouseleave+mouseup racing the real
+  // one, whose failed handshake reports late, or once a transcript already
+  // succeeded) — ignore it then, since it would otherwise clobber a good
+  // result already shown in status. While a session is genuinely open
+  // (e.g. nerd-dictation failed to start), surface it and reset.
   private handleVoiceError(message: string): void {
-    if (!this.inFlight) {
-      console.error(`voice: late/stale voice-error ignored: ${message}`);
+    if (!this.listening) {
+      console.error(`voice: stale/spurious voice-error ignored: ${message}`);
       return;
     }
+    this.listening = false;
     this.inFlight = false;
     this.setStatus(`voice ERROR: ${message}`);
   }
